@@ -94,10 +94,16 @@ class TaskController extends ChangeNotifier {
     try {
       if (task.completed || !task.notify) {
         await NotificationService.instance.cancelTask(task);
-      } else {
-        await NotificationService.instance.requestPermissions(requestExactAlarm: true);
-        await NotificationService.instance.scheduleTask(task);
+        return;
       }
-    } catch (_) {}
+
+      await NotificationService.instance.requestPermissions(
+        requestExactAlarm: true,
+      );
+      await NotificationService.instance.scheduleTask(task);
+    } catch (_) {
+      // Keep the task saved even if Android temporarily rejects an alarm.
+      // Startup/next edit will retry scheduling.
+    }
   }
 }

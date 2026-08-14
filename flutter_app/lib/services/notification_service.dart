@@ -16,7 +16,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _ready = false;
-  AndroidScheduleMode _scheduleMode = AndroidScheduleMode.inexactAllowWhileIdle;
+  AndroidScheduleMode _scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
 
   static const AndroidNotificationChannel _expiryChannel =
       AndroidNotificationChannel(
@@ -76,19 +76,30 @@ class NotificationService {
     await android?.createNotificationChannel(_taskChannel);
     await android?.createNotificationChannel(_testChannel);
 
-    // Prefer exact alarms when Android has granted the special alarm access.
-    // If it has not, fall back to inexact alarms so reminders still work
-    // without forcing the user into system settings.
+    // Exact alarms are required for reminders that must fire at the selected
+    // minute. If the special Android permission has not yet been granted,
+    // keep a safe inexact fallback until the user enables it.
     try {
       final exactAllowed = await android?.canScheduleExactNotifications();
-      if (exactAllowed == true) {
-        _scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
-      }
+      _scheduleMode = exactAllowed == true
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle;
     } catch (_) {
       _scheduleMode = AndroidScheduleMode.inexactAllowWhileIdle;
     }
 
     _ready = true;
+  }
+
+  Future<bool> exactAlarmPermissionGranted() async {
+    await init();
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    try {
+      return await android?.canScheduleExactNotifications() ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> requestPermissions({bool requestExactAlarm = false}) async {
@@ -212,6 +223,7 @@ class NotificationService {
   Future<void> scheduleAllForDocument(DocItem doc) async {
     await init();
     await cancelFor(doc);
+    await _refreshScheduleMode(requestExact: true);
 
     final expiry = doc.expiryDate;
     if (expiry == null) {
@@ -276,6 +288,7 @@ class NotificationService {
   }) async {
     await init();
     await cancelFor(doc);
+    await _refreshScheduleMode(requestExact: true);
 
     final expiry = doc.expiryDate;
     if (expiry == null) return <int>[];
@@ -340,9 +353,27 @@ class NotificationService {
     }
   }
 
+  Future<void> _refreshScheduleMode({bool requestExact = false}) async {
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    try {
+      var exactAllowed = await android?.canScheduleExactNotifications() ?? false;
+      if (!exactAllowed && requestExact) {
+        await android?.requestExactAlarmsPermission();
+        exactAllowed = await android?.canScheduleExactNotifications() ?? false;
+      }
+      _scheduleMode = exactAllowed
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle;
+    } catch (_) {
+      _scheduleMode = AndroidScheduleMode.inexactAllowWhileIdle;
+    }
+  }
+
   Future<void> scheduleTask(TaskItem task) async {
     await init();
     await cancelTask(task);
+    await _refreshScheduleMode(requestExact: true);
     if (task.completed || !task.notify) return;
 
     const details = NotificationDetails(
@@ -451,6 +482,17 @@ class NotificationService {
     await _plugin.cancel(task.notificationId);
   }
 
+  int _stableId(String value) {
+    // Stable across app launches; Dart's String.hashCode is not a persistence
+    // contract and can change between processes.
+    var hash = 2166136261;
+    for (final codeUnit in value.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * 16777619) & 0x7fffffff;
+    }
+    return hash == 0 ? 1 : hash;
+  }
+
   int _idFor(String docId, int offset) =>
-      (docId.hashCode ^ (offset * 7919)).abs() % 2147483647;
+      (_stableId(docId) ^ (offset * 7919)) & 0x7fffffff;
 }

@@ -49,7 +49,14 @@ class TaskItem extends HiveObject {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  int get notificationId => (id.hashCode ^ 0x5f3a).abs() % 2147483647;
+  int get notificationId {
+    var hash = 2166136261;
+    for (final codeUnit in id.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * 16777619) & 0x7fffffff;
+    }
+    return (hash ^ 0x5f3a) & 0x7fffffff;
+  }
 }
 
 class TaskItemAdapter extends TypeAdapter<TaskItem> {

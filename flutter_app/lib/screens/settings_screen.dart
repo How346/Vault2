@@ -105,13 +105,26 @@ class SettingsScreen extends StatelessWidget {
           Card(
             child: ListTile(
               leading: const Icon(Icons.notifications_active_outlined),
-              title: const Text('Enable expiry notifications'),
-              subtitle: const Text('Enable permission and test a notification'),
+              title: const Text('Enable precise reminders'),
+              subtitle: const Text(
+                'Allow notifications and exact alarms so reminders fire at the selected minute.',
+              ),
               onTap: () async {
-                await NotificationService.instance.requestPermissions(requestExactAlarm: true);
+                await NotificationService.instance.requestPermissions(
+                  requestExactAlarm: true,
+                );
+                final exact = await NotificationService.instance
+                    .exactAlarmPermissionGranted();
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Notifications enabled. Check the notification tray.')),
+                    SnackBar(
+                      content: Text(
+                        exact
+                            ? 'Precise reminders are enabled.'
+                            : 'Notifications are enabled, but Exact Alarm access is still off. Enable it for precise timing.',
+                      ),
+                      duration: const Duration(seconds: 4),
+                    ),
                   );
                 }
               },

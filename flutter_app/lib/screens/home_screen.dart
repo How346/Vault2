@@ -90,22 +90,43 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Hi,',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: scheme.onSurfaceVariant,
+                      RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: 'Hi,  ',
+                              style: TextStyle(
+                                color: scheme.onSurfaceVariant,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.1,
+                              ),
+                            ),
+                            TextSpan(
+                              text: name,
+                              style: TextStyle(
+                                color: scheme.onSurface,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.7,
+                                height: 1.05,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      Text(
-                        name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.6,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Your private wallet, ready when you are.',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.05,
+                          color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
                         ),
                       ),
                     ],
