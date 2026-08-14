@@ -103,6 +103,31 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 18),
           const _Header('Reminders'),
           Card(
+            child: FutureBuilder<bool>(
+              future: NotificationService.instance.exactAlarmPermissionGranted(),
+              builder: (context, snapshot) {
+                final exact = snapshot.data == true;
+                return ListTile(
+                  leading: Icon(
+                    exact
+                        ? Icons.verified_rounded
+                        : Icons.schedule_outlined,
+                    color: exact ? scheme.primary : scheme.error,
+                  ),
+                  title: Text(
+                    exact ? 'Precise reminders ready' : 'Precise reminders need access',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    exact
+                        ? 'Exact alarms are allowed for on-time reminders.'
+                        : 'Enable Alarms & reminders so Wallet can alert you at the selected minute.',
+                  ),
+                );
+              },
+            ),
+          ),
+          Card(
             child: ListTile(
               leading: const Icon(Icons.notifications_active_outlined),
               title: const Text('Enable precise reminders'),

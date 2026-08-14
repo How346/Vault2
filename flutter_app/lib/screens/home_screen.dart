@@ -90,44 +90,57 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'Hi,  ',
-                              style: TextStyle(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.1,
-                              ),
-                            ),
-                            TextSpan(
-                              text: name,
-                              style: TextStyle(
-                                color: scheme.onSurface,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.7,
-                                height: 1.05,
-                              ),
-                            ),
-                          ],
+                      Text(
+                        'Hi,',
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                          height: 1.0,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        'Your private wallet, ready when you are.',
+                        name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0.05,
-                          color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
+                          color: scheme.onSurface,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.6,
+                          height: 1.0,
                         ),
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Container(
+                            width: 20,
+                            height: 2.5,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [scheme.primary, scheme.secondary],
+                              ),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          Flexible(
+                            child: Text(
+                              'Your private wallet, ready when you are.',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.02,
+                                color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

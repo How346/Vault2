@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
@@ -7,7 +8,11 @@ import '../models/doc_item.dart';
 import '../models/task_item.dart';
 import 'storage_service.dart';
 
-/// Local scheduled notifications. No network/push service is required.
+/// Reliable, offline local notifications.
+///
+/// Reminder notifications are deliberately scheduled with
+/// exactAllowWhileIdle. We do NOT silently fall back to inexact alarms: if
+/// Android has not granted exact-alarm access, the user is told to enable it.
 class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
@@ -16,11 +21,12 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _ready = false;
-  AndroidScheduleMode _scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
+  bool _initializing = false;
+  String _timezoneName = 'UTC';
 
   static const AndroidNotificationChannel _expiryChannel =
       AndroidNotificationChannel(
-    'expiry_reminders_v2',
+    'expiry_reminders_v3',
     'Document expiry reminders',
     description: 'Local alerts before a document expires',
     importance: Importance.high,
@@ -28,14 +34,12 @@ class NotificationService {
 
   static const AndroidNotificationChannel _taskChannel =
       AndroidNotificationChannel(
-    'task_reminders_v2',
+    'task_reminders_v3',
     'Tasks & reminders',
     description: 'Local alerts for personal tasks',
     importance: Importance.high,
   );
 
-  // Separate channel for the diagnostic notification. Using a fresh channel
-  // prevents an old user's muted channel from making the test appear broken.
   static const AndroidNotificationChannel _testChannel =
       AndroidNotificationChannel(
     'wallet_test_v3',
@@ -46,124 +50,117 @@ class NotificationService {
 
   Future<void> init() async {
     if (_ready) return;
-
-    tzdata.initializeTimeZones();
-
-    // Use the device's actual IANA timezone instead of assuming India/UTC.
-    // This keeps reminders correct when the phone travels or uses DST.
-    try {
-      final deviceZone = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(deviceZone.identifier));
-    } catch (_) {
-      // UTC is the safe fallback if the native timezone cannot be read.
-      tz.setLocalLocation(tz.UTC);
+    if (_initializing) {
+      while (_initializing) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      return;
     }
 
-    const settings = InitializationSettings(
-      android: AndroidInitializationSettings('@drawable/notification_icon'),
-      iOS: DarwinInitializationSettings(
-        requestAlertPermission: false,
-        requestBadgePermission: false,
-        requestSoundPermission: false,
-      ),
-    );
-
-    await _plugin.initialize(settings);
-
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    await android?.createNotificationChannel(_expiryChannel);
-    await android?.createNotificationChannel(_taskChannel);
-    await android?.createNotificationChannel(_testChannel);
-
-    // Exact alarms are required for reminders that must fire at the selected
-    // minute. If the special Android permission has not yet been granted,
-    // keep a safe inexact fallback until the user enables it.
+    _initializing = true;
     try {
-      final exactAllowed = await android?.canScheduleExactNotifications();
-      _scheduleMode = exactAllowed == true
-          ? AndroidScheduleMode.exactAllowWhileIdle
-          : AndroidScheduleMode.inexactAllowWhileIdle;
-    } catch (_) {
-      _scheduleMode = AndroidScheduleMode.inexactAllowWhileIdle;
-    }
+      tzdata.initializeTimeZones();
 
-    _ready = true;
+      try {
+        final zone = await FlutterTimezone.getLocalTimezone();
+        _timezoneName = zone.identifier;
+        tz.setLocalLocation(tz.getLocation(zone.identifier));
+      } catch (error) {
+        debugPrint('Could not read device timezone: $error');
+        tz.setLocalLocation(tz.UTC);
+        _timezoneName = 'UTC';
+      }
+
+      const settings = InitializationSettings(
+        android: AndroidInitializationSettings('@drawable/notification_icon'),
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        ),
+      );
+
+      await _plugin.initialize(settings);
+
+      final android = _android;
+      await android?.createNotificationChannel(_expiryChannel);
+      await android?.createNotificationChannel(_taskChannel);
+      await android?.createNotificationChannel(_testChannel);
+
+      _ready = true;
+    } finally {
+      _initializing = false;
+    }
+  }
+
+  AndroidFlutterLocalNotificationsPlugin? get _android =>
+      _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+
+  String get timezoneName => _timezoneName;
+
+  Future<bool> notificationsEnabled() async {
+    await init();
+    return await _android?.areNotificationsEnabled() ?? true;
   }
 
   Future<bool> exactAlarmPermissionGranted() async {
     await init();
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
     try {
-      return await android?.canScheduleExactNotifications() ?? false;
+      return await _android?.canScheduleExactNotifications() ?? false;
     } catch (_) {
       return false;
     }
   }
 
-  Future<void> requestPermissions({bool requestExactAlarm = false}) async {
+  /// Requests notification permission and, when requested by an explicit
+  /// user action, opens Android's Exact Alarm access page.
+  ///
+  /// We intentionally use SCHEDULE_EXACT_ALARM rather than declaring both
+  /// exact-alarm permissions. Android recommends choosing one; SCHEDULE is
+  /// the appropriate user-granted permission for a secondary reminder
+  /// feature. See Android's exact-alarm documentation.
+  Future<bool> requestPermissions({bool requestExactAlarm = false}) async {
     await init();
 
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-
-    // Android 13+: notifications are a runtime permission. Always ask at the
-    // first explicit enable action; scheduling alone cannot grant it.
-    await android?.requestNotificationsPermission();
-
-    // Android 14+ can deny SCHEDULE_EXACT_ALARM by default. Exact alarms are
-    // used when available so reminders are delivered at the selected minute.
-    // Only open the system settings from an explicit user action.
-    if (requestExactAlarm) {
-      try {
-        final exactAllowed = await android?.canScheduleExactNotifications();
-        if (exactAllowed != true) {
-          await android?.requestExactAlarmsPermission();
-        }
-      } catch (_) {}
-    }
+    await _android?.requestNotificationsPermission();
 
     final ios = _plugin.resolvePlatformSpecificImplementation<
         IOSFlutterLocalNotificationsPlugin>();
-    await ios?.requestPermissions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    await ios?.requestPermissions(alert: true, badge: true, sound: true);
 
-    // Refresh the scheduling mode after permission changes.
+    if (requestExactAlarm) {
+      await _requestExactAlarmAccess();
+    }
+
+    return await notificationsEnabled();
+  }
+
+  Future<bool> _requestExactAlarmAccess() async {
+    final android = _android;
+    if (android == null) return true;
+
     try {
-      final exactAllowed = await android?.canScheduleExactNotifications();
-      _scheduleMode = exactAllowed == true
-          ? AndroidScheduleMode.exactAllowWhileIdle
-          : AndroidScheduleMode.inexactAllowWhileIdle;
-    } catch (_) {
-      _scheduleMode = AndroidScheduleMode.inexactAllowWhileIdle;
+      if (await android.canScheduleExactNotifications()) return true;
+      await android.requestExactAlarmsPermission();
+      // The Android Settings activity is asynchronous. Re-check immediately;
+      // the lifecycle callback in main.dart will retry when the user returns.
+      return await android.canScheduleExactNotifications();
+    } catch (error) {
+      debugPrint('Exact alarm permission request failed: $error');
+      return false;
     }
   }
 
-  /// Shows an immediate notification. Useful for verifying that the Android
-  /// notification permission/channel is working before testing a future date.
   Future<bool> showTestNotification() async {
     await init();
-
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-
-    // The test action must work even if the user skipped the startup prompt.
-    // Ask for Android 13+ notification permission immediately before showing.
-    final permissionResult = await android?.requestNotificationsPermission();
-    final enabled = await android?.areNotificationsEnabled();
-
-    if (enabled == false || permissionResult == false) {
-      return false;
-    }
+    final enabled = await requestPermissions();
+    if (!enabled) return false;
 
     await _plugin.show(
       987654,
       'Wallet',
-      'Test notification — reminders are enabled.',
+      'Test notification — notifications are working.',
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'wallet_test_v3',
@@ -186,19 +183,13 @@ class NotificationService {
       ),
       payload: 'notification_test',
     );
-
     return true;
   }
 
-  /// Rebuilds OS schedules from the local database after app start.
-  /// Android stores alarms outside the Flutter process, but this also repairs
-  /// schedules that were lost after an update, restore, or migration.
   Future<void> rescheduleStoredNotifications() async {
     await init();
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    final enabled = await android?.areNotificationsEnabled();
-    if (enabled == false) return;
+    if (!await notificationsEnabled()) return;
+    if (!await exactAlarmPermissionGranted()) return;
 
     final storage = StorageService.instance;
     for (final doc in storage.documents.values) {
@@ -206,30 +197,69 @@ class NotificationService {
         final ids = await scheduleExpiry(doc);
         doc.reminderIds = ids;
         await doc.save();
-      } catch (_) {
-        // One broken record must never prevent other reminders from loading.
+      } catch (error) {
+        debugPrint('Document reminder restore failed: $error');
       }
     }
 
     for (final task in storage.tasks.values) {
       try {
         await scheduleTask(task);
-      } catch (_) {
-        // Continue scheduling the remaining tasks.
+      } catch (error) {
+        debugPrint('Task reminder restore failed: $error');
       }
     }
   }
 
+  /// Called after returning from Android Settings. If exact-alarm access was
+  /// just granted, rebuild all future schedules immediately.
+  Future<void> onAppResumed() async {
+    try {
+      if (!await exactAlarmPermissionGranted()) return;
+      await rescheduleStoredNotifications();
+    } catch (error) {
+      debugPrint('Reminder resume sync failed: $error');
+    }
+  }
+
+  Future<void> _requireExactAlarm() async {
+    if (!await notificationsEnabled()) {
+      throw StateError('Wallet notifications are disabled.');
+    }
+    if (!await exactAlarmPermissionGranted()) {
+      throw StateError(
+        'Exact Alarm access is disabled. Open Wallet → Settings → Reminders and enable precise reminders.',
+      );
+    }
+  }
+
+  tz.TZDateTime _localDateTime(DateTime value) {
+    // DateTime values created by the date/time pickers represent the user's
+    // local wall-clock time. Reconstruct it in tz.local so DST is handled by
+    // the timezone package rather than by a raw millisecond conversion.
+    return tz.TZDateTime(
+      tz.local,
+      value.year,
+      value.month,
+      value.day,
+      value.hour,
+      value.minute,
+      value.second,
+    );
+  }
+
   Future<void> scheduleAllForDocument(DocItem doc) async {
     await init();
-    await cancelFor(doc);
-    await _refreshScheduleMode(requestExact: true);
 
     final expiry = doc.expiryDate;
     if (expiry == null) {
+      await cancelFor(doc);
       doc.reminderIds = <int>[];
       return;
     }
+
+    await _requireExactAlarm();
+    await cancelFor(doc);
 
     final ids = <int>[];
     for (final offset in const [30, 7, 1]) {
@@ -239,59 +269,30 @@ class NotificationService {
         expiry.day - offset,
         9,
       );
-
       if (!when.isAfter(DateTime.now())) continue;
 
       final id = _idFor(doc.id, offset);
-      await _plugin.zonedSchedule(
-        id,
-        '${doc.title} expires soon',
-        offset == 1
-            ? 'Expires tomorrow. Tap to review your document.'
-            : 'Expires in $offset days. Tap to review your document.',
-        tz.TZDateTime(
-          tz.local,
-          when.year,
-          when.month,
-          when.day,
-          when.hour,
-          when.minute,
-        ),
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'expiry_reminders_v2',
-            'Document expiry reminders',
-            channelDescription: 'Local alerts before a document expires',
-            icon: 'notification_icon',
-            importance: Importance.high,
-            priority: Priority.high,
-            playSound: true,
-            enableVibration: true,
-          ),
-          iOS: DarwinNotificationDetails(),
-        ),
-        androidScheduleMode: _scheduleMode,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        payload: doc.id,
-      );
+      await _scheduleDocumentNotification(doc, id, offset, _localDateTime(when));
+      await _verifyScheduled(id);
       ids.add(id);
     }
-
     doc.reminderIds = ids;
   }
 
-  /// Backwards-compatible name used by the wallet controller.
   Future<List<int>> scheduleExpiry(
     DocItem doc, {
     List<int> offsets = const [30, 7, 1],
   }) async {
     await init();
-    await cancelFor(doc);
-    await _refreshScheduleMode(requestExact: true);
 
     final expiry = doc.expiryDate;
-    if (expiry == null) return <int>[];
+    if (expiry == null) {
+      await cancelFor(doc);
+      return <int>[];
+    }
+
+    await _requireExactAlarm();
+    await cancelFor(doc);
 
     final ids = <int>[];
     for (final offset in offsets) {
@@ -304,81 +305,63 @@ class NotificationService {
       if (!when.isAfter(DateTime.now())) continue;
 
       final id = _idFor(doc.id, offset);
-      await _plugin.zonedSchedule(
+      await _scheduleDocumentNotification(
+        doc,
         id,
-        '${doc.title} expires soon',
-        offset == 1
-            ? 'Expires tomorrow. Tap to review your document.'
-            : 'Expires in $offset days. Tap to review your document.',
-        tz.TZDateTime(
-          tz.local,
-          when.year,
-          when.month,
-          when.day,
-          when.hour,
-          when.minute,
-        ),
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'expiry_reminders_v2',
-            'Document expiry reminders',
-            channelDescription: 'Local alerts before a document expires',
-            icon: 'notification_icon',
-            importance: Importance.high,
-            priority: Priority.high,
-            playSound: true,
-            enableVibration: true,
-          ),
-          iOS: DarwinNotificationDetails(),
-        ),
-        androidScheduleMode: _scheduleMode,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        payload: doc.id,
+        offset,
+        _localDateTime(when),
       );
+      await _verifyScheduled(id);
       ids.add(id);
     }
     return ids;
   }
 
-  Future<void> cancelFor(DocItem doc) async {
-    await init();
-    for (final id in doc.reminderIds) {
-      await _plugin.cancel(id);
-    }
-    // Also cancel deterministic IDs even if an older database record lost
-    // its reminderIds during migration.
-    for (final offset in const [30, 7, 1]) {
-      await _plugin.cancel(_idFor(doc.id, offset));
-    }
-  }
-
-  Future<void> _refreshScheduleMode({bool requestExact = false}) async {
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    try {
-      var exactAllowed = await android?.canScheduleExactNotifications() ?? false;
-      if (!exactAllowed && requestExact) {
-        await android?.requestExactAlarmsPermission();
-        exactAllowed = await android?.canScheduleExactNotifications() ?? false;
-      }
-      _scheduleMode = exactAllowed
-          ? AndroidScheduleMode.exactAllowWhileIdle
-          : AndroidScheduleMode.inexactAllowWhileIdle;
-    } catch (_) {
-      _scheduleMode = AndroidScheduleMode.inexactAllowWhileIdle;
-    }
+  Future<void> _scheduleDocumentNotification(
+    DocItem doc,
+    int id,
+    int offset,
+    tz.TZDateTime when,
+  ) async {
+    await _plugin.zonedSchedule(
+      id,
+      '${doc.title} expires soon',
+      offset == 1
+          ? 'Expires tomorrow. Tap to review your document.'
+          : 'Expires in $offset days. Tap to review your document.',
+      when,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'expiry_reminders_v3',
+          'Document expiry reminders',
+          channelDescription: 'Local alerts before a document expires',
+          icon: 'notification_icon',
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      payload: doc.id,
+    );
   }
 
   Future<void> scheduleTask(TaskItem task) async {
     await init();
+    if (task.completed || !task.notify) {
+      await cancelTask(task);
+      return;
+    }
+    await _requireExactAlarm();
     await cancelTask(task);
-    await _refreshScheduleMode(requestExact: true);
-    if (task.completed || !task.notify) return;
 
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
-        'task_reminders_v2',
+        'task_reminders_v3',
         'Tasks & reminders',
         channelDescription: 'Local alerts for personal tasks',
         icon: 'notification_icon',
@@ -390,47 +373,37 @@ class NotificationService {
       iOS: DarwinNotificationDetails(),
     );
 
-    final body =
-        task.notes.trim().isEmpty ? 'Tap to open your reminder.' : task.notes;
+    final body = task.notes.trim().isEmpty
+        ? 'Tap to open your reminder.'
+        : task.notes.trim();
 
     var due = task.dueAt;
     if (!task.hasTime) {
       due = DateTime(due.year, due.month, due.day, 9);
     }
-    if (!due.isAfter(DateTime.now()) && task.repeat == TaskRepeat.once) return;
+
+    var when = _localDateTime(due);
+    final now = tz.TZDateTime.now(tz.local);
 
     if (task.repeat == TaskRepeat.once) {
+      if (!when.isAfter(now)) return;
       await _plugin.zonedSchedule(
         task.notificationId,
         task.title,
         body,
-        tz.TZDateTime(
-          tz.local,
-          due.year,
-          due.month,
-          due.day,
-          due.hour,
-          due.minute,
-        ),
+        when,
         details,
-        androidScheduleMode: _scheduleMode,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
         payload: task.id,
       );
+      await _verifyScheduled(task.notificationId);
       return;
     }
 
-    var when = tz.TZDateTime(
-      tz.local,
-      due.year,
-      due.month,
-      due.day,
-      due.hour,
-      due.minute,
-    );
-    final now = tz.TZDateTime.now(tz.local);
-
+    // For recurring reminders we calculate the first future occurrence and
+    // then let the plugin repeat using the correct calendar component.
     if (task.repeat == TaskRepeat.daily) {
       while (!when.isAfter(now)) {
         when = when.add(const Duration(days: 1));
@@ -443,13 +416,13 @@ class NotificationService {
       while (!when.isAfter(now)) {
         final nextMonth = when.month == 12 ? 1 : when.month + 1;
         final nextYear = when.month == 12 ? when.year + 1 : when.year;
-        final day = when.day;
         final lastDay = DateTime(nextYear, nextMonth + 1, 0).day;
+        final day = when.day > lastDay ? lastDay : when.day;
         when = tz.TZDateTime(
           tz.local,
           nextYear,
           nextMonth,
-          day > lastDay ? lastDay : day,
+          day,
           when.hour,
           when.minute,
         );
@@ -469,12 +442,30 @@ class NotificationService {
       body,
       when,
       details,
-      androidScheduleMode: _scheduleMode,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: component,
       payload: task.id,
     );
+    await _verifyScheduled(task.notificationId);
+  }
+
+  Future<void> _verifyScheduled(int id) async {
+    final pending = await _plugin.pendingNotificationRequests();
+    if (!pending.any((request) => request.id == id)) {
+      throw StateError('Android did not retain scheduled notification $id.');
+    }
+  }
+
+  Future<void> cancelFor(DocItem doc) async {
+    await init();
+    for (final id in doc.reminderIds) {
+      await _plugin.cancel(id);
+    }
+    for (final offset in const [30, 7, 1]) {
+      await _plugin.cancel(_idFor(doc.id, offset));
+    }
   }
 
   Future<void> cancelTask(TaskItem task) async {
@@ -483,8 +474,6 @@ class NotificationService {
   }
 
   int _stableId(String value) {
-    // Stable across app launches; Dart's String.hashCode is not a persistence
-    // contract and can change between processes.
     var hash = 2166136261;
     for (final codeUnit in value.codeUnits) {
       hash ^= codeUnit;

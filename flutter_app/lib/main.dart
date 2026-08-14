@@ -11,6 +11,17 @@ import 'state/settings_controller.dart';
 import 'state/task_controller.dart';
 import 'state/wallet_controller.dart';
 
+final class _AppLifecycleObserver extends WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(NotificationService.instance.onAppResumed());
+    }
+  }
+}
+
+final _appLifecycleObserver = _AppLifecycleObserver();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -23,6 +34,8 @@ Future<void> main() async {
   // Flutter frame: a native notification/plugin problem should never leave
   // the user staring at a white screen.
   await StorageService.instance.init();
+
+  WidgetsBinding.instance.addObserver(_appLifecycleObserver);
 
   runApp(
     MultiProvider(
