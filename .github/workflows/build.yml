@@ -75,31 +75,7 @@ jobs:
       - name: Generate App Icons
         run: dart run flutter_launcher_icons
 
-      # ─────────────────────────────────────────────
-      # Remove stale notification icon resources
-      # ─────────────────────────────────────────────
-      # Older repository versions contained notification_icon.xml while the
-      # current notification service uses notification_icon.png. GitHub uploads
-      # do not delete old tracked files, so remove the stale XML before Gradle
-      # merges Android resources.
-      - name: Clean stale notification resources
-        shell: bash
-        run: |
-          set -euo pipefail
-          find android/app/src/main/res -type f \
-            \( -name 'notification_icon.*' -o -name 'notification_icon.*' \) \
-            -print -delete || true
-          mkdir -p android/app/src/main/res/drawable
-          # The notification service expects exactly one notification_icon resource.
-          # Recreate the checked-in PNG if an old GitHub file removed it.
-          if [ ! -f android/app/src/main/res/drawable/notification_icon.png ]; then
-            echo 'ERROR: notification_icon.png is missing'
-            exit 1
-          fi
-          if find android/app/src/main/res -type f -name 'notification_icon.*' | grep -v '\.png$' | grep -q .; then
-            echo 'ERROR: duplicate notification_icon resources remain'
-            exit 1
-          fi
+
 
       # ─────────────────────────────────────────────
       # Clean
