@@ -66,121 +66,152 @@ class _HomeScreenState extends State<HomeScreen> {
     nameCtrl.dispose();
   }
 
+  void _openProfiles() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ProfilesScreen(),
+      ),
+    );
+  }
+
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SettingsScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final wallet = context.watch<WalletController>();
     final scheme = Theme.of(context).colorScheme;
+
     final searching = wallet.query.trim().isNotEmpty;
     final expiring = wallet.expiringSoon;
-    final name = wallet.activeProfile?.name ?? 'there';
+    final name = wallet.activeProfile?.name.trim().isNotEmpty == true
+        ? wallet.activeProfile!.name.trim()
+        : 'there';
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 130),
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            16,
+            12,
+            16,
+            130,
+          ),
           children: [
-            // ------------------------------------------------------- header
+            // ============================================================
+            // PREMIUM MOBILE HEADER
+            // ============================================================
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const AppLogo(size: 52),
-                const SizedBox(width: 12),
+                const AppLogo(size: 48),
+
+                const SizedBox(width: 11),
+
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Hi,',
+                        'Welcome back',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: scheme.onSurfaceVariant,
-                          fontSize: 12.5,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w600,
-                          letterSpacing: 0.2,
-                          height: 1.0,
+                          letterSpacing: 0.1,
+                          height: 1.1,
                         ),
                       ),
+
                       const SizedBox(height: 3),
+
                       Text(
                         name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: scheme.onSurface,
-                          fontSize: 24,
+                          fontSize: 21,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: -0.6,
-                          height: 1.0,
+                          letterSpacing: -0.45,
+                          height: 1.05,
                         ),
                       ),
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          Container(
-                            width: 20,
-                            height: 2.5,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [scheme.primary, scheme.secondary],
-                              ),
-                              borderRadius: BorderRadius.circular(99),
-                            ),
+
+                      const SizedBox(height: 3),
+
+                      Text(
+                        'Your private document wallet',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant.withValues(
+                            alpha: 0.72,
                           ),
-                          const SizedBox(width: 7),
-                          Flexible(
-                            child: Text(
-                              'Your private wallet, ready when you are.',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: 0.02,
-                                color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
-                              ),
-                            ),
-                          ),
-                        ],
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.05,
+                          height: 1.1,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                _RoundAction(
+
+                const SizedBox(width: 8),
+
+                // Profile
+                _HeaderAction(
                   icon: Icons.person_outline_rounded,
                   tooltip: 'Profiles',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ProfilesScreen(),
-                    ),
-                  ),
+                  onTap: _openProfiles,
                 ),
-                const SizedBox(width: 10),
-                _RoundAction(
+
+                const SizedBox(width: 7),
+
+                // Settings
+                _HeaderAction(
                   icon: Icons.settings_outlined,
                   tooltip: 'Settings',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SettingsScreen(),
-                    ),
-                  ),
+                  onTap: _openSettings,
                 ),
               ],
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
 
-            // ------------------------------------------------------- search
+            // ============================================================
+            // SEARCH
+            // ============================================================
             TextField(
               controller: _searchCtrl,
               onChanged: wallet.search,
+              textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: 'Search documents',
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  size: 21,
+                ),
                 suffixIcon: searching
                     ? IconButton(
-                        icon: const Icon(Icons.close),
+                        tooltip: 'Clear search',
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 20,
+                        ),
                         onPressed: () {
                           _searchCtrl.clear();
                           wallet.search('');
@@ -188,7 +219,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       )
                     : PopupMenuButton<DocSort>(
                         tooltip: 'Sort',
-                        icon: const Icon(Icons.tune_rounded),
+                        icon: const Icon(
+                          Icons.tune_rounded,
+                          size: 20,
+                        ),
                         onSelected: wallet.setSort,
                         itemBuilder: (_) => const [
                           PopupMenuItem(
@@ -208,17 +242,29 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
 
+            // ============================================================
+            // CONTENT
+            // ============================================================
             if (searching)
               ..._searchResults(wallet)
             else
-              ..._hub(wallet, expiring, scheme, name),
+              ..._hub(
+                wallet,
+                expiring,
+                scheme,
+                name,
+              ),
           ],
         ),
       ),
     );
   }
+
+  // ======================================================================
+  // SEARCH RESULTS
+  // ======================================================================
 
   List<Widget> _searchResults(WalletController wallet) {
     final docs = wallet.allDocuments;
@@ -261,6 +307,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ======================================================================
+  // HOME HUB
+  // ======================================================================
+
   List<Widget> _hub(
     WalletController wallet,
     List expiring,
@@ -270,24 +320,35 @@ class _HomeScreenState extends State<HomeScreen> {
     final total = wallet.allDocuments.length;
 
     return [
-      // ------------------------------------------------------ offline banner
+      // ================================================================
+      // OFFLINE PRIVACY CARD
+      // ================================================================
       Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
-          color: scheme.primaryContainer.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(20),
+          color: scheme.primaryContainer.withValues(
+            alpha: 0.52,
+          ),
+          borderRadius: BorderRadius.circular(18),
         ),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: scheme.surface,
+            Container(
+              width: 43,
+              height: 43,
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                borderRadius: BorderRadius.circular(14),
+              ),
               child: Icon(
                 Icons.lock_rounded,
+                size: 21,
                 color: scheme.primary,
               ),
             ),
-            const SizedBox(width: 14),
+
+            const SizedBox(width: 12),
+
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,39 +357,58 @@ class _HomeScreenState extends State<HomeScreen> {
                     total == 1
                         ? '1 document stored offline'
                         : '$total documents stored offline',
-                    style: const TextStyle(
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: scheme.onSurface,
                       fontWeight: FontWeight.w800,
-                      fontSize: 15.5,
+                      fontSize: 14.5,
+                      letterSpacing: -0.15,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
                     'No cloud, no accounts, no tracking.',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
+
+            const SizedBox(width: 8),
+
             Icon(
               Icons.verified_rounded,
-              size: 30,
-              color: scheme.primary.withValues(alpha: 0.45),
+              size: 26,
+              color: scheme.primary.withValues(
+                alpha: 0.48,
+              ),
             ),
           ],
         ),
       ),
 
-      // ------------------------------------------------------ expiring soon
+      // ================================================================
+      // EXPIRING SOON
+      // ================================================================
+
       if (expiring.isNotEmpty) ...[
         const SizedBox(height: 22),
+
         const _SectionTitle('Expiring soon'),
+
         const SizedBox(height: 10),
+
         SizedBox(
-          height: 96,
+          height: 94,
           child: ListView.separated(
+            physics: const BouncingScrollPhysics(),
             scrollDirection: Axis.horizontal,
             itemCount: expiring.length,
             separatorBuilder: (_, __) => const SizedBox(width: 10),
@@ -341,10 +421,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: SizedBox(
                   width: 220,
                   child: Card(
+                    margin: EdgeInsets.zero,
                     color: days < 0
                         ? scheme.errorContainer
                         : scheme.tertiaryContainer,
                     child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -354,10 +436,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(13),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          mainAxisAlignment:
+                              MainAxisAlignment.center,
                           children: [
                             Text(
                               doc.title,
@@ -365,14 +449,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
-                                fontSize: 15,
+                                fontSize: 14.5,
                               ),
                             ),
                             const SizedBox(height: 6),
                             Text(
                               expiryLabel(doc.expiryDate),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontSize: 12.5,
+                                fontSize: 11.5,
                               ),
                             ),
                           ],
@@ -387,11 +473,17 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
 
-      // ------------------------------------------------------ pinned
+      // ================================================================
+      // PINNED
+      // ================================================================
+
       if (wallet.favorites.isNotEmpty) ...[
         const SizedBox(height: 22),
+
         const _SectionTitle('Pinned'),
+
         const SizedBox(height: 10),
+
         ...List.generate(
           wallet.favorites.length,
           (i) {
@@ -419,17 +511,21 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
 
-      // ------------------------------------------------------ categories
+      // ================================================================
+      // CATEGORIES
+      // ================================================================
+
       const SizedBox(height: 22),
 
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const _SectionTitle('Categories'),
+
           TextButton.icon(
             onPressed: _addCategoryDialog,
             icon: const Icon(
-              Icons.add,
+              Icons.add_rounded,
               size: 18,
             ),
             label: const Text('New category'),
@@ -443,7 +539,8 @@ class _HomeScreenState extends State<HomeScreen> {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: wallet.categories.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        gridDelegate:
+            const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
@@ -475,7 +572,13 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
   }
 
-  Future<void> _confirmDeleteCategory(DocCategory cat) async {
+  // ======================================================================
+  // DELETE CATEGORY
+  // ======================================================================
+
+  Future<void> _confirmDeleteCategory(
+    DocCategory cat,
+  ) async {
     final wallet = context.read<WalletController>();
 
     final ok = await showDialog<bool>(
@@ -504,8 +607,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _RoundAction extends StatelessWidget {
-  const _RoundAction({
+// ==========================================================================
+// HEADER ACTION
+// ==========================================================================
+
+class _HeaderAction extends StatelessWidget {
+  const _HeaderAction({
     required this.icon,
     required this.tooltip,
     required this.onTap,
@@ -527,11 +634,12 @@ class _RoundAction extends StatelessWidget {
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(10),
+          child: SizedBox(
+            width: 40,
+            height: 40,
             child: Icon(
               icon,
-              size: 21,
+              size: 20,
               color: scheme.onSurface,
             ),
           ),
@@ -541,6 +649,10 @@ class _RoundAction extends StatelessWidget {
   }
 }
 
+// ==========================================================================
+// SECTION TITLE
+// ==========================================================================
+
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.text);
 
@@ -548,12 +660,16 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Text(
       text,
-      style: const TextStyle(
-        fontSize: 19,
+      style: TextStyle(
+        color: scheme.onSurface,
+        fontSize: 18,
         fontWeight: FontWeight.w800,
-        letterSpacing: -0.4,
+        letterSpacing: -0.35,
+        height: 1.1,
       ),
     );
   }
