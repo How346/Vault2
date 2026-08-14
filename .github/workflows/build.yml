@@ -1,0 +1,143 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Analyze and Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        working-directory: flutter_app
+
+    steps:
+      # ─────────────────────────────────────────────
+      # Checkout
+      # ─────────────────────────────────────────────
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ─────────────────────────────────────────────
+      # Java 17
+      # ─────────────────────────────────────────────
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      # ─────────────────────────────────────────────
+      # Flutter
+      # ─────────────────────────────────────────────
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.29.3"
+          channel: stable
+          cache: true
+
+      # ─────────────────────────────────────────────
+      # Doctor
+      # ─────────────────────────────────────────────
+      - name: Flutter Doctor
+        run: flutter doctor -v
+
+      # ─────────────────────────────────────────────
+      # Dependencies
+      # ─────────────────────────────────────────────
+      - name: Get Dependencies
+        run: flutter pub get
+
+      # ─────────────────────────────────────────────
+      # Analyze the checked-in source; CI must never rewrite Dart/Android files.
+      # ─────────────────────────────────────────────
+      - name: Analyze Flutter
+        run: flutter analyze
+
+      # ─────────────────────────────────────────────
+      # Generate launcher icons
+      # ─────────────────────────────────────────────
+      - name: Generate App Icons
+        run: dart run flutter_launcher_icons
+
+      # ─────────────────────────────────────────────
+      # Remove stale notification icon resources
+      # ─────────────────────────────────────────────
+      # Older repository versions contained notification_icon.xml while the
+      # current notification service uses notification_icon.png. GitHub uploads
+      # do not delete old tracked files, so remove the stale XML before Gradle
+      # merges Android resources.
+      - name: Clean stale notification resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          find android/app/src/main/res -type f \
+            \( -name 'notification_icon.*' -o -name 'notification_icon.*' \) \
+            -print -delete || true
+          mkdir -p android/app/src/main/res/drawable
+          # The notification service expects exactly one notification_icon resource.
+          # Recreate the checked-in PNG if an old GitHub file removed it.
+          if [ ! -f android/app/src/main/res/drawable/notification_icon.png ]; then
+            echo 'ERROR: notification_icon.png is missing'
+            exit 1
+          fi
+          if find android/app/src/main/res -type f -name 'notification_icon.*' | grep -v '\.png$' | grep -q .; then
+            echo 'ERROR: duplicate notification_icon resources remain'
+            exit 1
+          fi
+
+      # ─────────────────────────────────────────────
+      # Clean
+      # ─────────────────────────────────────────────
+      - name: Clean Flutter Build
+        run: flutter clean
+
+      # ─────────────────────────────────────────────
+      # Get dependencies again after clean
+      # ─────────────────────────────────────────────
+      - name: Get Dependencies Again
+        run: flutter pub get
+
+      # ─────────────────────────────────────────────
+      # Final analysis
+      # ─────────────────────────────────────────────
+      - name: Final Flutter Analyze
+        run: flutter analyze
+
+
+      # ─────────────────────────────────────────────
+      # Build Release APK
+      # ─────────────────────────────────────────────
+      - name: Build Release APK
+        run: flutter build apk --release --no-tree-shake-icons
+
+      # ─────────────────────────────────────────────
+      # Verify APK exists
+      # ─────────────────────────────────────────────
+      
+
+      # ─────────────────────────────────────────────
+      # Upload APK
+      # ─────────────────────────────────────────────
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
