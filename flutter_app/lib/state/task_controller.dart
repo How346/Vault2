@@ -97,13 +97,17 @@ class TaskController extends ChangeNotifier {
         return;
       }
 
-      await NotificationService.instance.requestPermissions(
-        requestExactAlarm: true,
-      );
+      final ready = await NotificationService.instance.ensureReminderAccess();
+      if (!ready) {
+        throw StateError(
+          'Precise reminder access is required. Enable Alarms & reminders for Wallet, then return to the app.',
+        );
+      }
       await NotificationService.instance.scheduleTask(task);
-    } catch (_) {
-      // Keep the task saved even if Android temporarily rejects an alarm.
-      // Startup/next edit will retry scheduling.
+    } catch (error) {
+      // Keep the task saved. The UI can tell the user why scheduling did not
+      // complete and Android Settings can be opened immediately.
+      rethrow;
     }
   }
 }

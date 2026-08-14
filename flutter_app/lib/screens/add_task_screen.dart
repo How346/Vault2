@@ -62,32 +62,59 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           .showSnackBar(const SnackBar(content: Text('Add a title first')));
       return;
     }
+
     final due = DateTime(
-        _date.year, _date.month, _date.day, _time.hour, _time.minute);
+      _date.year,
+      _date.month,
+      _date.day,
+      _time.hour,
+      _time.minute,
+    );
     final ctrl = context.read<TaskController>();
     final existing = widget.task;
 
-    if (existing == null) {
-      await ctrl.create(
-        title: title,
-        notes: _notes.text.trim(),
-        dueAt: due,
-        repeat: _repeat,
-        priority: _priority,
-        notify: _notify,
-        profileId: context.read<WalletController>().activeProfileId,
-      );
-    } else {
-      existing
-        ..title = title
-        ..notes = _notes.text.trim()
-        ..dueAt = due
-        ..repeat = _repeat
-        ..priority = _priority
-        ..notify = _notify;
-      await ctrl.save(existing, isNew: false);
+    try {
+      if (existing == null) {
+        await ctrl.create(
+          title: title,
+          notes: _notes.text.trim(),
+          dueAt: due,
+          repeat: _repeat,
+          priority: _priority,
+          notify: _notify,
+          profileId: context.read<WalletController>().activeProfileId,
+        );
+      } else {
+        existing
+          ..title = title
+          ..notes = _notes.text.trim()
+          ..dueAt = due
+          ..repeat = _repeat
+          ..priority = _priority
+          ..notify = _notify;
+        await ctrl.save(existing, isNew: false);
+      }
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      final exactMissing = error is StateError &&
+          error.message.toString().contains('Precise reminder access');
+      if (exactMissing) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enable “Alarms & reminders” for Wallet, then return here. Your reminder is saved.'),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reminder saved, but scheduling failed: $error'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
-    if (mounted) Navigator.pop(context);
   }
 
   @override

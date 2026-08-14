@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
@@ -134,6 +135,36 @@ class NotificationService {
     }
 
     return await notificationsEnabled();
+  }
+
+  static const MethodChannel _exactAlarmChannel =
+      MethodChannel('com.docwallet.wallet/exact_alarm');
+
+  /// Opens the Android system page for this app's Exact Alarm access.
+  /// Android controls this permission; the app cannot grant it itself.
+  Future<bool> openExactAlarmSettings() async {
+    try {
+      final opened = await _exactAlarmChannel.invokeMethod<bool>(
+        'openExactAlarmSettings',
+      );
+      return opened == true;
+    } catch (error) {
+      debugPrint('Could not open Exact Alarm settings: $error');
+      return false;
+    }
+  }
+
+  /// Ensures both notification and precise-alarm access are available.
+  /// If Exact Alarm is missing, Android Settings is opened automatically.
+  Future<bool> ensureReminderAccess({bool openSettings = true}) async {
+    await init();
+    final notifications = await requestPermissions();
+    if (!notifications) return false;
+    if (await exactAlarmPermissionGranted()) return true;
+    if (openSettings) {
+      await openExactAlarmSettings();
+    }
+    return false;
   }
 
   Future<bool> _requestExactAlarmAccess() async {

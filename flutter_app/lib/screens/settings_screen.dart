@@ -108,6 +108,7 @@ class SettingsScreen extends StatelessWidget {
               builder: (context, snapshot) {
                 final exact = snapshot.data == true;
                 return ListTile(
+                  onTap: exact ? null : () => NotificationService.instance.openExactAlarmSettings(),
                   leading: Icon(
                     exact
                         ? Icons.verified_rounded
@@ -135,23 +136,19 @@ class SettingsScreen extends StatelessWidget {
                 'Allow notifications and exact alarms so reminders fire at the selected minute.',
               ),
               onTap: () async {
-                await NotificationService.instance.requestPermissions(
-                  requestExactAlarm: true,
-                );
-                final exact = await NotificationService.instance
-                    .exactAlarmPermissionGranted();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        exact
-                            ? 'Precise reminders are enabled.'
-                            : 'Notifications are enabled, but Exact Alarm access is still off. Enable it for precise timing.',
-                      ),
-                      duration: const Duration(seconds: 4),
+                final ready = await NotificationService.instance
+                    .ensureReminderAccess(openSettings: true);
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      ready
+                          ? 'Precise reminders are enabled.'
+                          : 'Android Settings opened. Turn on “Allow setting alarms and reminders” for Wallet, then return here.',
                     ),
-                  );
-                }
+                    duration: const Duration(seconds: 6),
+                  ),
+                );
               },
             ),
           ),
