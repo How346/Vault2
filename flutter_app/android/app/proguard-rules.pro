@@ -13,3 +13,15 @@
 
 # Play Core (referenced by Flutter deferred components)
 -dontwarn com.google.android.play.core.**
+
+# flutter_local_notifications 17.x uses Gson to persist scheduled
+# notification data. R8 must preserve generic signatures or Gson
+# TypeToken fails at runtime in release builds.
+-keepattributes Signature
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken { *; }
+-keep class com.dexterous.flutterlocalnotifications.** { *; }
+
+# Preserve Gson generic metadata and annotations used by notification cache.
+-keepattributes InnerClasses,EnclosingMethod,*Annotation*
+-dontwarn com.google.gson.**
