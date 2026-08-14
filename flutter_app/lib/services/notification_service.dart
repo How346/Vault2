@@ -141,11 +141,11 @@ class NotificationService {
     if (android == null) return true;
 
     try {
-      if (await android.canScheduleExactNotifications()) return true;
+      if (await android.canScheduleExactNotifications() == true) return true;
       await android.requestExactAlarmsPermission();
       // The Android Settings activity is asynchronous. Re-check immediately;
       // the lifecycle callback in main.dart will retry when the user returns.
-      return await android.canScheduleExactNotifications();
+      return (await android.canScheduleExactNotifications()) == true;
     } catch (error) {
       debugPrint('Exact alarm permission request failed: $error');
       return false;
