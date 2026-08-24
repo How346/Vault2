@@ -34,16 +34,6 @@ class NotificationService {
     enableVibration: true,
   );
 
-  static const _taskChannel = AndroidNotificationDetails(
-    'task_reminders_v2',
-    'Tasks & reminders',
-    channelDescription: 'Alerts for personal tasks and reminders',
-    importance: Importance.high,
-    priority: Priority.high,
-    playSound: true,
-    enableVibration: true,
-  );
-
   Future<void> init() async {
     if (_ready) return;
 
