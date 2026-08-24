@@ -1,7 +1,3 @@
-import 'package:flutter/material.dart';
-// Notification theme: green for active reminders, red for overdue reminders.
-const _activeNotificationColor = Color(0xFF2E7D32);
-const _lateNotificationColor = Color(0xFFD32F2F);
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
