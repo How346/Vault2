@@ -59,7 +59,7 @@ class FileService {
     try {
       shot = await _picker.pickImage(
         source: ImageSource.camera,
-
+        imageQuality: 100,
       );
     } on Exception catch (e) {
       throw CaptureException('Camera could not start (${_short(e)}).');
@@ -71,7 +71,7 @@ class FileService {
   Future<List<String>> pickImages({bool crop = false, bool enhance = false}) async {
     List<XFile> shots;
     try {
-      shots = await _picker.pickMultiImage();
+      shots = await _picker.pickMultiImage(imageQuality: 100);
     } on Exception catch (e) {
       throw CaptureException('Could not open the gallery (${_short(e)}).');
     }
@@ -142,7 +142,7 @@ class FileService {
       final tmp = await getTemporaryDirectory();
       final target = p.join(
         tmp.path,
-        'enh_${DateTime.now().microsecondsSinceEpoch}${p.extension(path).toLowerCase() == '.png' ? '.png' : '.jpg'}',
+        'enh_${DateTime.now().microsecondsSinceEpoch}.jpg',
       );
       final ok = await Isolate.run(() => _enhanceSync(path, target));
       return ok ? target : path;
@@ -156,21 +156,11 @@ class FileService {
       final bytes = File(source).readAsBytesSync();
       final decoded = img.decodeImage(bytes);
       if (decoded == null) return false;
-
-      // Keep the original resolution and use a very light adjustment.
-      // Explicit enhancement should never aggressively normalize colours.
-      final out = img.adjustColor(
-        decoded,
-        contrast: 1.04,
-        saturation: 1.0,
-        gamma: 1.0,
-      );
-
-      final ext = p.extension(source).toLowerCase();
-      final encoded = ext == '.png'
-          ? img.encodePng(out)
-          : img.encodeJpg(out, quality: 100);
-      File(target).writeAsBytesSync(encoded, flush: true);
+      var out = decoded;
+      // Enhancement is opt-in. Never alter colour or resolution during a normal
+      // import. If the user explicitly asks for enhancement, keep it gentle.
+      out = img.adjustColor(out, contrast: 1.04, saturation: 1.0, gamma: 1.0);
+      File(target).writeAsBytesSync(img.encodeJpg(out, quality: 100));
       return true;
     } catch (_) {
       return false;

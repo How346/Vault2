@@ -28,14 +28,8 @@ class SettingsScreen extends StatelessWidget {
               children: ThemeMode.values.map((mode) {
                 return RadioListTile<ThemeMode>(
                   value: mode,
-                  // ignore: deprecated_member_use
                   groupValue: settings.themeMode,
-                  // ignore: deprecated_member_use
-                  onChanged: (value) {
-                    if (value != null) {
-                      settings.setThemeMode(value);
-                    }
-                  },
+                  onChanged: (v) => settings.setThemeMode(v ?? ThemeMode.system),
                   title: Text(switch (mode) {
                     ThemeMode.system => 'Follow system',
                     ThemeMode.light => 'Light',
@@ -103,82 +97,15 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 18),
           const _Header('Reminders'),
           Card(
-            child: FutureBuilder<bool>(
-              future: NotificationService.instance.exactAlarmPermissionGranted(),
-              builder: (context, snapshot) {
-                final exact = snapshot.data == true;
-                return ListTile(
-                  onTap: exact ? null : () => NotificationService.instance.openExactAlarmSettings(),
-                  leading: Icon(
-                    exact
-                        ? Icons.verified_rounded
-                        : Icons.schedule_outlined,
-                    color: exact ? scheme.primary : scheme.error,
-                  ),
-                  title: Text(
-                    exact ? 'Precise reminders ready' : 'Precise reminders need access',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Text(
-                    exact
-                        ? 'Exact alarms are allowed for on-time reminders.'
-                        : 'Enable Alarms & reminders so Wallet can alert you at the selected minute.',
-                  ),
-                );
-              },
-            ),
-          ),
-          Card(
             child: ListTile(
               leading: const Icon(Icons.notifications_active_outlined),
-              title: const Text('Enable precise reminders'),
-              subtitle: const Text(
-                'Allow notifications and exact alarms so reminders fire at the selected minute.',
-              ),
+              title: const Text('Enable expiry notifications'),
+              subtitle: const Text('Local alerts at 30, 7 and 1 day before'),
               onTap: () async {
-                final ready = await NotificationService.instance
-                    .ensureReminderAccess(openSettings: true);
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      ready
-                          ? 'Precise reminders are enabled.'
-                          : 'Android Settings opened. Turn on “Allow setting alarms and reminders” for Wallet, then return here.',
-                    ),
-                    duration: const Duration(seconds: 6),
-                  ),
-                );
-              },
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.notification_add_outlined),
-              title: const Text('Test notification'),
-              subtitle: const Text('Show a notification now'),
-              onTap: () async {
-                try {
-                  final shown =
-                      await NotificationService.instance.showTestNotification();
-                  if (!context.mounted) return;
+                await NotificationService.instance.requestPermissions();
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        shown
-                            ? 'Test notification sent. Check your notification tray.'
-                            : 'Notifications are blocked for Wallet. Enable notifications in Android Settings and try again.',
-                      ),
-                      duration: const Duration(seconds: 4),
-                    ),
-                  );
-                } catch (error) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Notification test failed: $error'),
-                      duration: const Duration(seconds: 5),
-                    ),
+                    const SnackBar(content: Text('Notification permission requested')),
                   );
                 }
               },

@@ -88,7 +88,7 @@ class StorageService {
         id: 'me',
         name: 'Me',
         relation: 'Primary',
-        colorValue: 0xFF0F766E,
+        colorValue: 0xFF0F9D78,
         iconCodePoint: 0xe7fd,
         isDefault: true,
       ),
@@ -171,7 +171,7 @@ class StorageService {
           id: m['id'] as String,
           name: m['name'] as String? ?? 'Me',
           relation: m['relation'] as String? ?? '',
-          colorValue: m['color'] as int? ?? 0xFF0F766E,
+          colorValue: m['color'] as int? ?? 0xFF0F9D78,
           iconCodePoint: m['icon'] as int? ?? 0xe7fd,
           isDefault: m['isDefault'] as bool? ?? false,
           createdAt: m['createdAt'] == null

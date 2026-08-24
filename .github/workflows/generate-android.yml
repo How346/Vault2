@@ -1,0 +1,67 @@
+name: Generate Android Folder
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: flutter_app
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.29.3"
+          channel: stable
+          cache: true
+
+      - name: Flutter Doctor
+        run: flutter doctor -v
+
+      - name: Get Packages
+        run: flutter pub get
+
+      - name: Create Android Platform
+        run: |
+          flutter create \
+            --platforms=android \
+            --org com.docwallet \
+            .
+
+      - name: Show Generated Files
+        run: |
+          ls
+          ls android
+
+      - name: Commit Android Folder
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add android
+
+          if git diff --cached --quiet; then
+            echo "Android folder already exists."
+            exit 0
+          fi
+
+          git commit -m "Generate Android platform"
+          git push

@@ -35,7 +35,7 @@ class _CameraScanScreenState extends State<CameraScanScreen>
   String? _fatal;
 
   final List<ScanPage> _pages = [];
-  ScanFilter _filter = ScanFilter.enhance;
+  ScanFilter _filter = ScanFilter.original;
   bool _torch = false;
   bool _horizontal = false;
   bool _busy = false;

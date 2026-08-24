@@ -34,6 +34,8 @@ class TaskItem extends HiveObject {
   bool completed;
   String profileId;
   DateTime createdAt;
+  /// Optional local image attached to the reminder. Kept fully offline.
+  String imagePath;
 
   TaskItem({
     required this.id,
@@ -47,15 +49,16 @@ class TaskItem extends HiveObject {
     this.completed = false,
     this.profileId = 'me',
     DateTime? createdAt,
+    this.imagePath = '',
   }) : createdAt = createdAt ?? DateTime.now();
 
   int get notificationId {
     var hash = 2166136261;
-    for (final codeUnit in id.codeUnits) {
-      hash ^= codeUnit;
+    for (final unit in id.codeUnits) {
+      hash ^= unit;
       hash = (hash * 16777619) & 0x7fffffff;
     }
-    return (hash ^ 0x5f3a) & 0x7fffffff;
+    return hash == 0 ? 1 : hash;
   }
 }
 
@@ -81,6 +84,7 @@ class TaskItemAdapter extends TypeAdapter<TaskItem> {
       createdAt: m['createdAt'] == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(m['createdAt'] as int),
+      imagePath: m['imagePath'] as String? ?? '',
     );
   }
 
@@ -98,6 +102,7 @@ class TaskItemAdapter extends TypeAdapter<TaskItem> {
       'completed': o.completed,
       'profileId': o.profileId,
       'createdAt': o.createdAt.millisecondsSinceEpoch,
+      'imagePath': o.imagePath,
     });
   }
 }

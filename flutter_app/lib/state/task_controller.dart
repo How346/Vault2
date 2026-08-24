@@ -60,6 +60,7 @@ class TaskController extends ChangeNotifier {
     TaskPriority priority = TaskPriority.medium,
     bool notify = true,
     String profileId = 'me',
+    String imagePath = '',
   }) async {
     final task = TaskItem(
       id: 't-${_newId()}',
@@ -71,6 +72,7 @@ class TaskController extends ChangeNotifier {
       priority: priority,
       notify: notify,
       profileId: profileId,
+      imagePath: imagePath,
     );
     return save(task);
   }
@@ -94,20 +96,9 @@ class TaskController extends ChangeNotifier {
     try {
       if (task.completed || !task.notify) {
         await NotificationService.instance.cancelTask(task);
-        return;
+      } else {
+        await NotificationService.instance.scheduleTask(task);
       }
-
-      final ready = await NotificationService.instance.ensureReminderAccess();
-      if (!ready) {
-        throw StateError(
-          'Precise reminder access is required. Enable Alarms & reminders for Wallet, then return to the app.',
-        );
-      }
-      await NotificationService.instance.scheduleTask(task);
-    } catch (error) {
-      // Keep the task saved. The UI can tell the user why scheduling did not
-      // complete and Android Settings can be opened immediately.
-      rethrow;
-    }
+    } catch (_) {}
   }
 }

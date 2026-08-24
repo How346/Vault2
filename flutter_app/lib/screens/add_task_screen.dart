@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../models/doc_item.dart';
@@ -32,6 +35,25 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   late TaskRepeat _repeat = widget.task?.repeat ?? TaskRepeat.once;
   late TaskPriority _priority = widget.task?.priority ?? TaskPriority.medium;
   late bool _notify = widget.task?.notify ?? true;
+  String _imagePath = '';
+  final ImagePicker _imagePicker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _imagePath = widget.task?.imagePath ?? '';
+  }
+
+  Future<void> _pickImage() async {
+    final image = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      imageQuality: 88,
+    );
+    if (image != null && mounted) setState(() => _imagePath = image.path);
+  }
+
+  void _removeImage() => setState(() => _imagePath = '');
 
   @override
   void dispose() {
@@ -62,59 +84,34 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           .showSnackBar(const SnackBar(content: Text('Add a title first')));
       return;
     }
-
     final due = DateTime(
-      _date.year,
-      _date.month,
-      _date.day,
-      _time.hour,
-      _time.minute,
-    );
+        _date.year, _date.month, _date.day, _time.hour, _time.minute);
     final ctrl = context.read<TaskController>();
     final existing = widget.task;
 
-    try {
-      if (existing == null) {
-        await ctrl.create(
-          title: title,
-          notes: _notes.text.trim(),
-          dueAt: due,
-          repeat: _repeat,
-          priority: _priority,
-          notify: _notify,
-          profileId: context.read<WalletController>().activeProfileId,
-        );
-      } else {
-        existing
-          ..title = title
-          ..notes = _notes.text.trim()
-          ..dueAt = due
-          ..repeat = _repeat
-          ..priority = _priority
-          ..notify = _notify;
-        await ctrl.save(existing, isNew: false);
-      }
-      if (mounted) Navigator.pop(context);
-    } catch (error) {
-      if (!mounted) return;
-      final exactMissing = error is StateError &&
-          error.message.toString().contains('Precise reminder access');
-      if (exactMissing) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Enable “Alarms & reminders” for Wallet, then return here. Your reminder is saved.'),
-            duration: Duration(seconds: 5),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Reminder saved, but scheduling failed: $error'),
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
+    if (existing == null) {
+      await ctrl.create(
+        title: title,
+        notes: _notes.text.trim(),
+        dueAt: due,
+        repeat: _repeat,
+        priority: _priority,
+        notify: _notify,
+        imagePath: _imagePath,
+        profileId: context.read<WalletController>().activeProfileId,
+      );
+    } else {
+      existing
+        ..title = title
+        ..notes = _notes.text.trim()
+        ..dueAt = due
+        ..repeat = _repeat
+        ..priority = _priority
+        ..notify = _notify
+        ..imagePath = _imagePath;
+      await ctrl.save(existing, isNew: false);
     }
+    if (mounted) Navigator.pop(context);
   }
 
   @override
@@ -168,6 +165,54 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
               maxLines: 4,
               decoration: const InputDecoration(
                   hintText: 'Description (optional)'),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.image_outlined),
+                    title: const Text('Attach an image'),
+                    subtitle: Text(_imagePath.isEmpty
+                        ? 'Optional — shown in the reminder notification'
+                        : 'Image attached'),
+                    trailing: IconButton(
+                      tooltip: 'Choose image',
+                      onPressed: _pickImage,
+                      icon: const Icon(Icons.add_photo_alternate_rounded),
+                    ),
+                  ),
+                  if (_imagePath.isNotEmpty && File(_imagePath).existsSync())
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Stack(
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              height: 180,
+                              child: Image.file(
+                                File(_imagePath),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: IconButton.filledTonal(
+                                tooltip: 'Remove image',
+                                onPressed: _removeImage,
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
             const SizedBox(height: 14),
             Card(

@@ -26,9 +26,9 @@ class AboutScreen extends StatelessWidget {
                 style: TextStyle(color: scheme.onSurfaceVariant)),
           ),
           const SizedBox(height: 26),
-          const Card(
+          Card(
             child: Column(
-              children: [
+              children: const [
                 _Info(
                   icon: Icons.card_giftcard_rounded,
                   title: "What's New",
