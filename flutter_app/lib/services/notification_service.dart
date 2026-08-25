@@ -252,7 +252,7 @@ class NotificationService {
     }
   }
 
-  AndroidNotificationStyleInformation? _taskStyle(TaskItem task) {
+  StyleInformation? _taskStyle(TaskItem task) {
     final path = task.imagePath;
     if (path == null || path.trim().isEmpty) return null;
     try {
@@ -263,7 +263,6 @@ class NotificationService {
         contentTitle: task.title,
         summaryText: task.notes.trim().isEmpty ? null : task.notes.trim(),
         hideExpandedLargeIcon: false,
-        showBigPictureWhenCollapsed: true,
       );
     } catch (_) {
       return null;
@@ -459,7 +458,7 @@ class NotificationService {
           playSound: true,
           enableVibration: true,
         ),
-        iOS: DarwinNotificationDetails(),
+        iOS: const DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
@@ -497,7 +496,7 @@ class NotificationService {
         largeIcon: imageBitmap,
         styleInformation: imageStyle,
       ),
-      iOS: DarwinNotificationDetails(),
+      iOS: const DarwinNotificationDetails(),
     );
 
     final body = task.notes.trim().isEmpty
