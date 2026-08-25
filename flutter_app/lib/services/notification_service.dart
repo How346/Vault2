@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,34 @@ import 'package:timezone/timezone.dart' as tz;
 import '../models/doc_item.dart';
 import '../models/task_item.dart';
 import 'storage_service.dart';
+
+@pragma('vm:entry-point')
+void notificationActionBackground(NotificationResponse response) {
+  // Keep the background handler deliberately small and independent of the
+  // Flutter UI. Android can invoke this callback while the app process is
+  // not running. For STOP we only need to remove the active notification.
+  if (response.actionId != 'stop_late_timer') return;
+
+  final plugin = FlutterLocalNotificationsPlugin();
+  unawaited(_cancelNotificationFromBackground(plugin, response.id));
+}
+
+Future<void> _cancelNotificationFromBackground(
+  FlutterLocalNotificationsPlugin plugin,
+  int? notificationId,
+) async {
+  if (notificationId == null) return;
+  try {
+    await plugin.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@drawable/notification_icon'),
+      ),
+    );
+    await plugin.cancel(notificationId);
+  } catch (error) {
+    debugPrint('Could not stop notification from background: $error');
+  }
+}
 
 /// Reliable, offline local notifications.
 ///
@@ -98,7 +127,11 @@ class NotificationService {
         ),
       );
 
-      await _plugin.initialize(settings);
+      await _plugin.initialize(
+        settings,
+        onDidReceiveNotificationResponse: _onNotificationResponse,
+        onDidReceiveBackgroundNotificationResponse: notificationActionBackground,
+      );
 
       final android = _android;
       await android?.createNotificationChannel(_expiryChannel);
@@ -198,6 +231,42 @@ class NotificationService {
     } catch (error) {
       debugPrint('Exact alarm permission request failed: $error');
       return false;
+    }
+  }
+
+  void _onNotificationResponse(NotificationResponse response) {
+    if (response.actionId == 'stop_late_timer' && response.id != null) {
+      unawaited(_plugin.cancel(response.id!));
+      return;
+    }
+  }
+
+  AndroidBitmap<Object>? _taskImageBitmap(TaskItem task) {
+    final path = task.imagePath;
+    if (path == null || path.trim().isEmpty) return null;
+    try {
+      if (!File(path).existsSync()) return null;
+      return FilePathAndroidBitmap(path);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  AndroidNotificationStyleInformation? _taskStyle(TaskItem task) {
+    final path = task.imagePath;
+    if (path == null || path.trim().isEmpty) return null;
+    try {
+      if (!File(path).existsSync()) return null;
+      return BigPictureStyleInformation(
+        FilePathAndroidBitmap(path),
+        largeIcon: FilePathAndroidBitmap(path),
+        contentTitle: task.title,
+        summaryText: task.notes.trim().isEmpty ? null : task.notes.trim(),
+        hideExpandedLargeIcon: false,
+        showBigPictureWhenCollapsed: true,
+      );
+    } catch (_) {
+      return null;
     }
   }
 
@@ -413,7 +482,9 @@ class NotificationService {
       debugPrint('Late timer scheduling failed: $error');
     }));
 
-    const details = NotificationDetails(
+    final imageBitmap = _taskImageBitmap(task);
+    final imageStyle = _taskStyle(task);
+    final details = NotificationDetails(
       android: AndroidNotificationDetails(
         'task_reminders_v3',
         'Tasks & reminders',
@@ -423,6 +494,8 @@ class NotificationService {
         priority: Priority.high,
         playSound: true,
         enableVibration: true,
+        largeIcon: imageBitmap,
+        styleInformation: imageStyle,
       ),
       iOS: DarwinNotificationDetails(),
     );
@@ -505,7 +578,12 @@ class NotificationService {
     await _verifyScheduled(task.notificationId);
   }
 
-  NotificationDetails _lateNotificationDetails(DateTime due) {
+  NotificationDetails _lateNotificationDetails(TaskItem task) {
+    final due = task.hasTime
+        ? task.dueAt
+        : DateTime(task.dueAt.year, task.dueAt.month, task.dueAt.day, 9);
+    final imageBitmap = _taskImageBitmap(task);
+    final imageStyle = _taskStyle(task);
     return NotificationDetails(
       android: AndroidNotificationDetails(
         'task_late_timer_v1',
@@ -535,9 +613,11 @@ class NotificationService {
         color: _lateColor,
         category: AndroidNotificationCategory.reminder,
         visibility: NotificationVisibility.public,
-        styleInformation: const BigTextStyleInformation(
-          'Still pending. Tap STOP once you have handled it.',
-        ),
+        largeIcon: imageBitmap,
+        styleInformation: imageStyle ??
+            const BigTextStyleInformation(
+              'Still pending. Tap STOP once you have handled it.',
+            ),
         actions: const [
           AndroidNotificationAction(
             'stop_late_timer',
@@ -580,7 +660,7 @@ class NotificationService {
         task.lateNotificationId,
         task.title,
         "You're late on this reminder",
-        _lateNotificationDetails(due),
+        _lateNotificationDetails(task),
         payload: 'late:${task.id}',
       );
       return;
@@ -591,7 +671,7 @@ class NotificationService {
       task.title,
       "You're late on this reminder",
       when,
-      _lateNotificationDetails(due),
+      _lateNotificationDetails(task),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
