@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show Color;
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -40,6 +43,21 @@ class NotificationService {
     description: 'Local alerts for personal tasks',
     importance: Importance.high,
   );
+
+  /// Ongoing, non-swipeable notification with a live Android chronometer
+  /// (the "how long since due" ticking timer) — same pattern delivery apps
+  /// like Flipkart use for "your order is late" alerts.
+  static const AndroidNotificationChannel _lateChannel =
+      AndroidNotificationChannel(
+    'task_late_timer_v1',
+    'Overdue timer',
+    description:
+        'A persistent, ongoing timer that counts up while a task is overdue',
+    importance: Importance.high,
+  );
+
+  /// Flipkart-style blue used for the colorized overdue timer notification.
+  static const Color _lateColor = Color(0xFF2A76D2);
 
   static const AndroidNotificationChannel _testChannel =
       AndroidNotificationChannel(
@@ -86,6 +104,7 @@ class NotificationService {
       final android = _android;
       await android?.createNotificationChannel(_expiryChannel);
       await android?.createNotificationChannel(_taskChannel);
+      await android?.createNotificationChannel(_lateChannel);
       await android?.createNotificationChannel(_testChannel);
 
       _ready = true;
@@ -389,6 +408,11 @@ class NotificationService {
     }
     await _requireExactAlarm();
     await cancelTask(task);
+    // Arm the ongoing "how late" chronometer independently of the one-shot
+    // alert below, so it still shows up even if scheduling the alert fails.
+    unawaited(scheduleLateTimer(task).catchError((Object error) {
+      debugPrint('Late timer scheduling failed: $error');
+    }));
 
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
@@ -482,6 +506,105 @@ class NotificationService {
     await _verifyScheduled(task.notificationId);
   }
 
+  NotificationDetails _lateNotificationDetails(DateTime due) {
+    return NotificationDetails(
+      android: AndroidNotificationDetails(
+        'task_late_timer_v1',
+        'Overdue timer',
+        channelDescription:
+            'A persistent, ongoing timer that counts up while a task is overdue',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: 'notification_icon',
+        // Non-swipeable, stays until the user taps STOP.
+        ongoing: true,
+        autoCancel: false,
+        onlyAlertOnce: true,
+        playSound: false,
+        enableVibration: false,
+        // Native Android "chronometer" — a live MM:SS/HH:MM ticking clock
+        // rendered by the OS itself, so it keeps counting even if the app
+        // is closed. `when` is the original due time, so the chronometer
+        // shows exactly how late the task is.
+        showWhen: true,
+        when: due.millisecondsSinceEpoch,
+        usesChronometer: true,
+        chronometerCountDown: false,
+        // Blue, colorized card — same visual language as delivery-tracking
+        // notifications (Flipkart, Swiggy, etc.).
+        colorized: true,
+        color: _lateColor,
+        category: AndroidNotificationCategory.reminder,
+        visibility: NotificationVisibility.public,
+        styleInformation: const BigTextStyleInformation(
+          'Still pending. Tap STOP once you have handled it.',
+        ),
+        actions: const [
+          AndroidNotificationAction(
+            'stop_late_timer',
+            'STOP',
+            cancelNotification: true,
+            showsUserInterface: false,
+          ),
+        ],
+      ),
+      iOS: const DarwinNotificationDetails(
+        interruptionLevel: InterruptionLevel.timeSensitive,
+      ),
+    );
+  }
+
+  /// Starts (or re-arms) the ongoing "you're late" timer for a one-off task.
+  /// It is scheduled to appear the moment the task becomes due and then
+  /// counts up on its own — no app process needed to keep it alive.
+  Future<void> scheduleLateTimer(TaskItem task) async {
+    await init();
+    await cancelLateTimer(task);
+
+    if (task.completed || !task.notify) return;
+    // Recurring tasks reset every cycle, so a single overdue timer doesn't
+    // map cleanly onto them — keep this for one-off reminders.
+    if (task.repeat != TaskRepeat.once) return;
+
+    await _requireExactAlarm();
+
+    var due = task.dueAt;
+    if (!task.hasTime) due = DateTime(due.year, due.month, due.day, 9);
+
+    final when = _localDateTime(due);
+    final now = tz.TZDateTime.now(tz.local);
+
+    if (!when.isAfter(now)) {
+      // Already overdue right now — show it immediately, chronometer will
+      // correctly reflect elapsed time since `due`.
+      await _plugin.show(
+        task.lateNotificationId,
+        task.title,
+        "You're late on this reminder",
+        _lateNotificationDetails(due),
+        payload: 'late:${task.id}',
+      );
+      return;
+    }
+
+    await _plugin.zonedSchedule(
+      task.lateNotificationId,
+      task.title,
+      "You're late on this reminder",
+      when,
+      _lateNotificationDetails(due),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      payload: 'late:${task.id}',
+    );
+  }
+
+  Future<void> cancelLateTimer(TaskItem task) async {
+    await init();
+    await _plugin.cancel(task.lateNotificationId);
+  }
+
   Future<void> _verifyScheduled(int id) async {
     final pending = await _plugin.pendingNotificationRequests();
     if (!pending.any((request) => request.id == id)) {
@@ -502,6 +625,7 @@ class NotificationService {
   Future<void> cancelTask(TaskItem task) async {
     await init();
     await _plugin.cancel(task.notificationId);
+    await _plugin.cancel(task.lateNotificationId);
   }
 
   int _stableId(String value) {

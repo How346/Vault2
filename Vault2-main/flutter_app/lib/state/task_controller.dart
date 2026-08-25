@@ -51,6 +51,11 @@ class TaskController extends ChangeNotifier {
     return draft;
   }
 
+  /// Generates an id up front, so callers that need to import a file (e.g.
+  /// an attached image) can copy it into storage under this exact id before
+  /// the task is persisted.
+  String newId() => 't-${_newId()}';
+
   Future<TaskItem> create({
     required String title,
     String notes = '',
@@ -60,9 +65,11 @@ class TaskController extends ChangeNotifier {
     TaskPriority priority = TaskPriority.medium,
     bool notify = true,
     String profileId = 'me',
+    String? id,
+    String? imagePath,
   }) async {
     final task = TaskItem(
-      id: 't-${_newId()}',
+      id: id ?? newId(),
       title: title,
       notes: notes,
       dueAt: dueAt,
@@ -71,6 +78,7 @@ class TaskController extends ChangeNotifier {
       priority: priority,
       notify: notify,
       profileId: profileId,
+      imagePath: imagePath,
     );
     return save(task);
   }
@@ -86,6 +94,11 @@ class TaskController extends ChangeNotifier {
     try {
       await NotificationService.instance.cancelTask(task);
     } catch (_) {}
+    if (task.imagePath != null) {
+      try {
+        await StorageService.instance.deleteFilesFor(task.id);
+      } catch (_) {}
+    }
     await _box.delete(task.id);
     notifyListeners();
   }

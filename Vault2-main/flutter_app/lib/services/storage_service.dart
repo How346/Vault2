@@ -116,6 +116,15 @@ class StorageService {
     }
   }
 
+  /// Removes any files imported under [id] (used for both documents and
+  /// task attachments, which share the same import path/id-keyed folder).
+  Future<void> deleteFilesFor(String id) async {
+    final dir = Directory(p.join(_vaultDir.path, id));
+    if (dir.existsSync()) {
+      await dir.delete(recursive: true);
+    }
+  }
+
   /// Vault root for imported document files.
   Directory get vaultDir => _vaultDir;
 

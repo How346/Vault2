@@ -34,6 +34,7 @@ class TaskItem extends HiveObject {
   bool completed;
   String profileId;
   DateTime createdAt;
+  String? imagePath;
 
   TaskItem({
     required this.id,
@@ -47,16 +48,25 @@ class TaskItem extends HiveObject {
     this.completed = false,
     this.profileId = 'me',
     DateTime? createdAt,
+    this.imagePath,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  int get notificationId {
+  int _hashWith(int salt) {
     var hash = 2166136261;
     for (final codeUnit in id.codeUnits) {
       hash ^= codeUnit;
       hash = (hash * 16777619) & 0x7fffffff;
     }
-    return (hash ^ 0x5f3a) & 0x7fffffff;
+    return (hash ^ salt) & 0x7fffffff;
   }
+
+  /// Id used for the ordinary "it's time" alert.
+  int get notificationId => _hashWith(0x5f3a);
+
+  /// Id used for the ongoing "you're late" chronometer notification. Kept
+  /// distinct from [notificationId] so the two never collide or overwrite
+  /// each other.
+  int get lateNotificationId => _hashWith(0x1a7e10);
 }
 
 class TaskItemAdapter extends TypeAdapter<TaskItem> {
@@ -81,6 +91,7 @@ class TaskItemAdapter extends TypeAdapter<TaskItem> {
       createdAt: m['createdAt'] == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(m['createdAt'] as int),
+      imagePath: m['imagePath'] as String?,
     );
   }
 
@@ -98,6 +109,7 @@ class TaskItemAdapter extends TypeAdapter<TaskItem> {
       'completed': o.completed,
       'profileId': o.profileId,
       'createdAt': o.createdAt.millisecondsSinceEpoch,
+      'imagePath': o.imagePath,
     });
   }
 }
