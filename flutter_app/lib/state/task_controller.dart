@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/task_item.dart';
 import '../services/notification_service.dart';
@@ -10,6 +12,22 @@ enum TaskFilter { all, pending, completed }
 
 class TaskController extends ChangeNotifier {
   final _box = StorageService.instance.tasks;
+  StreamSubscription<BoxEvent>? _boxSub;
+
+  TaskController() {
+    // The STOP action on the overdue notification can complete a task by
+    // writing to this box directly (it may run in a background isolate
+    // with no TaskController around to call notifyListeners()). Watching
+    // the box means the UI stays in sync no matter where the write came
+    // from.
+    _boxSub = _box.watch().listen((_) => notifyListeners());
+  }
+
+  @override
+  void dispose() {
+    _boxSub?.cancel();
+    super.dispose();
+  }
 
   TaskFilter _filter = TaskFilter.all;
   TaskFilter get filter => _filter;

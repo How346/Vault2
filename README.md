@@ -1,60 +1,52 @@
-# Doc Wallet — Offline Privacy-First Document Wallet (Flutter)
+# Secure Doc Vault
 
-100% local. No Firebase, no cloud, no network calls. Everything lives in Hive +
-app-private file storage on the device.
+You are an expert Flutter developer creating a fully offline, privacy-first Document Wallet app like Zoop Wallet.
 
-## Run / build
+### Privacy & Offline Architecture:
 
-```bash
-cd flutter_app
-flutter pub get
-flutter run                 # debug
-flutter build apk --release # APK
+- 100% Local Storage: No cloud servers, Firebase, or external API dependencies. All documents, images, and user data must be saved locally on the device storage using Hive / Isar / SQLite.
+
+- Fully Functional Offline APK: The generated build must work completely without an internet connection.
+
+### Core Zoop-like Features:
+
+1. Category-based Hub: Pre-built categories for Aadhaar, PAN, DL, RC, Passport, Marksheets, Insurance, and Custom Categories.
+
+2. Smart Document Scanner & Picker: Crop, auto-enhance, and select PDF/Images from phone storage or camera.
+
+3. Metadata Extraction & Storage: Form fields for Document ID, Issue Date, Expiry Date, and Notes stored alongside the file.
+
+4. Privacy Masking: One-tap option to mask sensitive numbers (e.g., first 8 digits of Aadhaar) on preview/share.
+
+5. Quick Share: Generate masked/unmasked document views or share via local apps without uploading anywhere.
+
+6. Smart Expiry Reminders: Local device notifications for expiring documents (DL, Insurance, Passport).
+
+7. Security: Device Biometric (Fingerprint/FaceID) and 4-digit PIN lock before opening the app.
+
+### Technical & UI Guidelines:
+
+- Clean Material 3 design with smooth card animations and dark/light modes.
+
+- Production-ready, error-free Flutter code structure with clean state management.
+
+This project was built with [Lovable](https://lovable.dev).
+
+## Build with Lovable
+
+Continue developing this project in the [Lovable editor](https://lovable.dev/projects/6c4ff810-8696-4e78-bc56-df20b1dea97f).
+
+- **Ship faster**: describe what you want to build and Lovable handles the code.
+- **Stay in sync**: every change made in Lovable is committed straight to this repository.
+- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+
+## Development
+
+Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+
+```sh
+git clone <this-repository-url>
+cd <repository-name>
+npm i
+npm run dev
 ```
-
-> This code is source-only in this repo; it is not compiled or previewed here.
-
-## Structure
-
-```
-lib/
-  main.dart                  app bootstrap, Hive init, providers
-  app.dart                   MaterialApp, Material 3 themes, routing
-  models/                    Hive models + manual TypeAdapters (no build_runner)
-  services/                  storage, notifications, security, sharing
-  state/                     ChangeNotifier controllers
-  screens/                   lock, home hub, category, add/edit, viewer, settings
-  widgets/                   reusable cards / animations
-  utils/                     masking, formatting, constants
-```
-
-## Permissions
-
-Android `AndroidManifest.xml`:
-
-```xml
-<uses-permission android:name="android.permission.CAMERA"/>
-<uses-permission android:name="android.permission.USE_BIOMETRIC"/>
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-```
-
-Add inside `<application>` for cropping:
-
-```xml
-<activity android:name="com.yalantis.ucrop.UCropActivity"
-  android:screenOrientation="portrait"
-  android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
-```
-
-`MainActivity` must extend `FlutterFragmentActivity` (required by `local_auth`).
-
-iOS `Info.plist`: `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`,
-`NSFaceIDUsageDescription`.
-
-## Notes
-
-- Files are copied into the app-private documents dir, never shared storage.
-- PIN is stored as a salted SHA-256 hash in `flutter_secure_storage`.
-- Masking is applied at render/share time; the original value stays intact.

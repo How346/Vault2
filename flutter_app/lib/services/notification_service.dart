@@ -5,38 +5,89 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../models/doc_item.dart';
 import '../models/task_item.dart';
+import '../utils/constants.dart';
 import 'storage_service.dart';
 
 @pragma('vm:entry-point')
 void notificationActionBackground(NotificationResponse response) {
   // Keep the background handler deliberately small and independent of the
   // Flutter UI. Android can invoke this callback while the app process is
-  // not running. For STOP we only need to remove the active notification.
+  // not running.
   if (response.actionId != 'stop_late_timer') return;
 
-  final plugin = FlutterLocalNotificationsPlugin();
-  unawaited(_cancelNotificationFromBackground(plugin, response.id));
+  unawaited(_stopLateTimerAndCompleteTask(
+    plugin: FlutterLocalNotificationsPlugin(),
+    pluginNeedsInit: true,
+    payload: response.payload,
+    tappedNotificationId: response.id,
+  ));
 }
 
-Future<void> _cancelNotificationFromBackground(
-  FlutterLocalNotificationsPlugin plugin,
-  int? notificationId,
-) async {
-  if (notificationId == null) return;
+/// Handles the STOP action on the overdue chronometer notification: marks
+/// the underlying task as completed (so it is never rescheduled again) and
+/// removes both the ongoing "late" notification and the original one-shot
+/// alert, if it's still around. Shared by the foreground and background
+/// response handlers so behaviour is identical whether the app is open,
+/// backgrounded, or fully killed.
+Future<void> _stopLateTimerAndCompleteTask({
+  required FlutterLocalNotificationsPlugin plugin,
+  required bool pluginNeedsInit,
+  required String? payload,
+  required int? tappedNotificationId,
+}) async {
+  if (pluginNeedsInit) {
+    try {
+      await plugin.initialize(
+        const InitializationSettings(
+          android: AndroidInitializationSettings('@drawable/notification_icon'),
+        ),
+      );
+    } catch (error) {
+      debugPrint('Could not init plugin from background: $error');
+    }
+  }
+
+  String? taskId;
+  if (payload != null && payload.startsWith('late:')) {
+    taskId = payload.substring('late:'.length);
+  }
+
+  int? lateId = tappedNotificationId;
+  int? alertId;
+
   try {
-    await plugin.initialize(
-      const InitializationSettings(
-        android: AndroidInitializationSettings('@drawable/notification_icon'),
-      ),
-    );
-    await plugin.cancel(notificationId);
+    await Hive.initFlutter();
+    if (!Hive.isAdapterRegistered(4)) {
+      Hive.registerAdapter(TaskItemAdapter());
+    }
+    final box = Hive.isBoxOpen(HiveBoxes.tasks)
+        ? Hive.box<TaskItem>(HiveBoxes.tasks)
+        : await Hive.openBox<TaskItem>(HiveBoxes.tasks);
+
+    final task = taskId == null ? null : box.get(taskId);
+    if (task != null) {
+      alertId = task.notificationId;
+      lateId = task.lateNotificationId;
+      if (!task.completed) {
+        task.completed = true;
+        await box.put(task.id, task);
+      }
+    }
   } catch (error) {
-    debugPrint('Could not stop notification from background: $error');
+    debugPrint('Could not mark task complete from STOP action: $error');
+  }
+
+  try {
+    if (lateId != null) await plugin.cancel(lateId);
+    if (alertId != null) await plugin.cancel(alertId);
+  } catch (error) {
+    debugPrint('Could not cancel notification(s) after STOP: $error');
   }
 }
 
@@ -235,8 +286,13 @@ class NotificationService {
   }
 
   void _onNotificationResponse(NotificationResponse response) {
-    if (response.actionId == 'stop_late_timer' && response.id != null) {
-      unawaited(_plugin.cancel(response.id!));
+    if (response.actionId == 'stop_late_timer') {
+      unawaited(_stopLateTimerAndCompleteTask(
+        plugin: _plugin,
+        pluginNeedsInit: false,
+        payload: response.payload,
+        tappedNotificationId: response.id,
+      ));
       return;
     }
   }
