@@ -1,11 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../models/doc_item.dart';
 import '../models/task_item.dart';
+import '../services/file_service.dart';
+import '../services/storage_service.dart';
 import '../state/task_controller.dart';
 import '../state/wallet_controller.dart';
 import '../utils/formatters.dart';
@@ -35,31 +36,76 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   late TaskRepeat _repeat = widget.task?.repeat ?? TaskRepeat.once;
   late TaskPriority _priority = widget.task?.priority ?? TaskPriority.medium;
   late bool _notify = widget.task?.notify ?? true;
-  String _imagePath = '';
-  final ImagePicker _imagePicker = ImagePicker();
-
-  @override
-  void initState() {
-    super.initState();
-    _imagePath = widget.task?.imagePath ?? '';
-  }
-
-  Future<void> _pickImage() async {
-    final image = await _imagePicker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1600,
-      imageQuality: 88,
-    );
-    if (image != null && mounted) setState(() => _imagePath = image.path);
-  }
-
-  void _removeImage() => setState(() => _imagePath = '');
+  String? _imagePath = widget.task?.imagePath;
+  bool _pickingImage = false;
 
   @override
   void dispose() {
     _title.dispose();
     _notes.dispose();
     super.dispose();
+  }
+
+  Future<void> _addImage() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take photo'),
+              onTap: () => Navigator.pop(ctx, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+            if (_imagePath != null)
+              ListTile(
+                leading: Icon(Icons.delete_outline, color: Theme.of(ctx).colorScheme.error),
+                title: const Text('Remove image'),
+                onTap: () => Navigator.pop(ctx, 'remove'),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    if (choice == null || !mounted) return;
+    if (choice == 'remove') {
+      setState(() => _imagePath = null);
+      return;
+    }
+
+    setState(() => _pickingImage = true);
+    try {
+      final service = FileService.instance;
+      String? path;
+      if (choice == 'camera') {
+        path = await service.captureFromCamera(crop: false);
+      } else {
+        final picked = await service.pickImages(crop: false);
+        path = picked.isEmpty ? null : picked.first;
+      }
+      if (path != null && mounted) {
+        setState(() => _imagePath = path);
+      }
+    } on CaptureException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not attach that image.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pickingImage = false);
+    }
   }
 
   Future<void> _pickDate() async {
@@ -84,34 +130,74 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           .showSnackBar(const SnackBar(content: Text('Add a title first')));
       return;
     }
+
     final due = DateTime(
-        _date.year, _date.month, _date.day, _time.hour, _time.minute);
+      _date.year,
+      _date.month,
+      _date.day,
+      _time.hour,
+      _time.minute,
+    );
     final ctrl = context.read<TaskController>();
     final existing = widget.task;
 
-    if (existing == null) {
-      await ctrl.create(
-        title: title,
-        notes: _notes.text.trim(),
-        dueAt: due,
-        repeat: _repeat,
-        priority: _priority,
-        notify: _notify,
-        imagePath: _imagePath,
-        profileId: context.read<WalletController>().activeProfileId,
-      );
-    } else {
-      existing
-        ..title = title
-        ..notes = _notes.text.trim()
-        ..dueAt = due
-        ..repeat = _repeat
-        ..priority = _priority
-        ..notify = _notify
-        ..imagePath = _imagePath;
-      await ctrl.save(existing, isNew: false);
+    try {
+      // Picked images live in a temp/cache path; copy into permanent,
+      // app-private storage so it survives after the picker's temp file
+      // is cleared by the OS.
+      final taskId = existing?.id ?? ctrl.newId();
+      String? storedImagePath = existing?.imagePath;
+      if (_imagePath == null) {
+        storedImagePath = null;
+      } else if (_imagePath != existing?.imagePath) {
+        storedImagePath = await StorageService.instance
+            .importFile(_imagePath!, docId: taskId);
+      }
+
+      if (existing == null) {
+        await ctrl.create(
+          title: title,
+          notes: _notes.text.trim(),
+          dueAt: due,
+          repeat: _repeat,
+          priority: _priority,
+          notify: _notify,
+          profileId: context.read<WalletController>().activeProfileId,
+          id: taskId,
+          imagePath: storedImagePath,
+        );
+      } else {
+        existing
+          ..title = title
+          ..notes = _notes.text.trim()
+          ..dueAt = due
+          ..repeat = _repeat
+          ..priority = _priority
+          ..notify = _notify
+          ..imagePath = storedImagePath;
+        await ctrl.save(existing, isNew: false);
+      }
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      final exactMissing = error is StateError &&
+          error.message.toString().contains('Precise reminder access');
+      if (exactMissing) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enable “Alarms & reminders” for Wallet, then return here. Your reminder is saved.'),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reminder saved, but scheduling failed: $error'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
-    if (mounted) Navigator.pop(context);
   }
 
   @override
@@ -165,54 +251,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
               maxLines: 4,
               decoration: const InputDecoration(
                   hintText: 'Description (optional)'),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.image_outlined),
-                    title: const Text('Attach an image'),
-                    subtitle: Text(_imagePath.isEmpty
-                        ? 'Optional — shown in the reminder notification'
-                        : 'Image attached'),
-                    trailing: IconButton(
-                      tooltip: 'Choose image',
-                      onPressed: _pickImage,
-                      icon: const Icon(Icons.add_photo_alternate_rounded),
-                    ),
-                  ),
-                  if (_imagePath.isNotEmpty && File(_imagePath).existsSync())
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: Stack(
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              height: 180,
-                              child: Image.file(
-                                File(_imagePath),
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: IconButton.filledTonal(
-                                tooltip: 'Remove image',
-                                onPressed: _removeImage,
-                                icon: const Icon(Icons.close_rounded),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
             ),
             const SizedBox(height: 14),
             Card(
@@ -274,6 +312,57 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.image_outlined, color: scheme.primary),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text('Photo',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                        TextButton.icon(
+                          onPressed: _pickingImage ? null : _addImage,
+                          icon: Icon(_imagePath == null
+                              ? Icons.add_photo_alternate_outlined
+                              : Icons.edit_outlined),
+                          label: Text(_imagePath == null ? 'Add' : 'Change'),
+                        ),
+                      ],
+                    ),
+                    if (_pickingImage)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: Center(
+                            child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2.4))),
+                      )
+                    else if (_imagePath != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.file(
+                            File(_imagePath!),
+                            height: 160,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 12),

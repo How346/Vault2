@@ -503,6 +503,7 @@ class _AddDocumentScreenState extends State<AddDocumentScreen> {
             const SizedBox(height: 12),
 
             DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
               value: _categoryId,
               decoration: const InputDecoration(
                 labelText: 'Category',
@@ -808,7 +809,10 @@ class _AttachmentStrip extends StatelessWidget {
                               )
                             : Image.file(
                                 File(path),
-                                fit: BoxFit.cover,
+                                fit: BoxFit.contain,
+                                filterQuality: FilterQuality.high,
+                                isAntiAlias: false,
+                                gaplessPlayback: true,
                               ),
                       ),
                     ),

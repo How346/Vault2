@@ -88,7 +88,7 @@ class StorageService {
         id: 'me',
         name: 'Me',
         relation: 'Primary',
-        colorValue: 0xFF0F9D78,
+        colorValue: 0xFF0F766E,
         iconCodePoint: 0xe7fd,
         isDefault: true,
       ),
@@ -111,6 +111,15 @@ class StorageService {
 
   Future<void> deleteDocFiles(DocItem doc) async {
     final dir = Directory(p.join(_vaultDir.path, doc.id));
+    if (dir.existsSync()) {
+      await dir.delete(recursive: true);
+    }
+  }
+
+  /// Removes any files imported under [id] (used for both documents and
+  /// task attachments, which share the same import path/id-keyed folder).
+  Future<void> deleteFilesFor(String id) async {
+    final dir = Directory(p.join(_vaultDir.path, id));
     if (dir.existsSync()) {
       await dir.delete(recursive: true);
     }
@@ -171,7 +180,7 @@ class StorageService {
           id: m['id'] as String,
           name: m['name'] as String? ?? 'Me',
           relation: m['relation'] as String? ?? '',
-          colorValue: m['color'] as int? ?? 0xFF0F9D78,
+          colorValue: m['color'] as int? ?? 0xFF0F766E,
           iconCodePoint: m['icon'] as int? ?? 0xe7fd,
           isDefault: m['isDefault'] as bool? ?? false,
           createdAt: m['createdAt'] == null

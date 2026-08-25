@@ -30,7 +30,7 @@ class ImageOps {
     required String source,
     List<double>? quad,
     int quarterTurns = 0,
-    ScanFilter filter = ScanFilter.original,
+    ScanFilter filter = ScanFilter.enhance,
   }) async {
     try {
       final tmp = await getTemporaryDirectory();
@@ -55,32 +55,69 @@ class ImageOps {
     int filterIndex,
   ) {
     try {
-      final decoded = img.decodeImage(File(source).readAsBytesSync());
+      final bytes = File(source).readAsBytesSync();
+      final filter = ScanFilter.values[filterIndex];
+
+      // "Original" must really mean original. Do not decode/re-encode a
+      // gallery image just to display/save it; that causes JPEG generation
+      // loss and can change colours.
+      if (filter == ScanFilter.original &&
+          (quad == null || quad.length != 8) &&
+          quarterTurns % 4 == 0) {
+        File(target).writeAsBytesSync(bytes, flush: true);
+        return true;
+      }
+
+      final decoded = img.decodeImage(bytes);
       if (decoded == null) return false;
+
       var out = img.bakeOrientation(decoded);
 
-      if (quad != null && quad.length == 8) out = _warp(out, quad);
-      
-      if (quarterTurns % 4 != 0) {
-        out = img.copyRotate(out, angle: (quarterTurns % 4) * 90);
+      if (quad != null && quad.length == 8) {
+        out = _warp(out, quad);
       }
 
-      switch (ScanFilter.values[filterIndex]) {
+      if (quarterTurns % 4 != 0) {
+        out = img.copyRotate(
+          out,
+          angle: (quarterTurns % 4) * 90,
+        );
+      }
+
+      switch (filter) {
         case ScanFilter.original:
+          // No colour manipulation.
           break;
         case ScanFilter.enhance:
-          out = img.adjustColor(out, contrast: 1.16, saturation: 0.95, gamma: 0.95);
-          out = img.normalize(out, min: 8, max: 248);
+          // Gentle enhancement only; preserve document colours instead of
+          // normalising every channel and shifting the original palette.
+          out = img.adjustColor(
+            out,
+            contrast: 1.06,
+            saturation: 1.0,
+            gamma: 1.0,
+          );
         case ScanFilter.blackWhite:
           out = img.grayscale(out);
-          out = img.adjustColor(out, contrast: 1.7, brightness: 1.06);
-          out = img.normalize(out, min: 0, max: 255);
+          out = img.adjustColor(
+            out,
+            contrast: 1.35,
+            brightness: 1.02,
+          );
         case ScanFilter.punch:
-          out = img.adjustColor(out, contrast: 1.32, saturation: 1.18);
-          out = img.normalize(out, min: 4, max: 252);
+          out = img.adjustColor(
+            out,
+            contrast: 1.08,
+            saturation: 1.05,
+          );
       }
 
-      File(target).writeAsBytesSync(img.encodeJpg(out, quality: 100));
+      // Never downscale a user's document. Re-encoded scan output uses the
+      // highest practical JPEG quality to minimise generation loss.
+      File(target).writeAsBytesSync(
+        img.encodeJpg(out, quality: 100),
+        flush: true,
+      );
       return true;
     } catch (_) {
       return false;
@@ -97,8 +134,8 @@ class ImageOps {
     double dist(int a, int b) =>
         math.sqrt(math.pow(xs[a] - xs[b], 2) + math.pow(ys[a] - ys[b], 2));
 
-    final outW = math.max(dist(0, 1), dist(3, 2)).round().clamp(64, 3000);
-    final outH = math.max(dist(0, 3), dist(1, 2)).round().clamp(64, 3000);
+    final outW = math.max(dist(0, 1), dist(3, 2)).round().clamp(64, src.width);
+    final outH = math.max(dist(0, 3), dist(1, 2)).round().clamp(64, src.height);
     final out = img.Image(width: outW, height: outH);
 
     for (var y = 0; y < outH; y++) {

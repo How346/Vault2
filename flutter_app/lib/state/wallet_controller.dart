@@ -65,7 +65,7 @@ class WalletController extends ChangeNotifier {
   Future<Profile> addProfile({
     required String name,
     String relation = '',
-    int colorValue = 0xFF0F9D78,
+    int colorValue = 0xFF0F766E,
     int iconCodePoint = 0xe7fd,
   }) async {
     final id = 'p-${newId()}';
@@ -202,12 +202,24 @@ class WalletController extends ChangeNotifier {
         : DocFileType.image;
     draft.updatedAt = DateTime.now();
 
-    try {
-      draft.reminderIds = await NotificationService.instance.scheduleExpiry(draft);
-    } catch (_) {
-      draft.reminderIds = const [];
-    }
+    // Persist the document first so a notification/OEM scheduling problem can
+    // never cause a successfully imported file to disappear.
+    draft.reminderIds = const [];
     await _storage.documents.put(draft.id, draft);
+
+    try {
+      // Android 13+ blocks delivery until POST_NOTIFICATIONS is granted.
+      await NotificationService.instance.requestPermissions(requestExactAlarm: true);
+      draft.reminderIds =
+          await NotificationService.instance.scheduleExpiry(draft);
+      await draft.save();
+    } catch (_) {
+      // The document remains safely stored even if the OS temporarily rejects
+      // a schedule. The next edit/save will retry scheduling.
+      draft.reminderIds = const [];
+      await draft.save();
+    }
+
     notifyListeners();
     return draft;
   }

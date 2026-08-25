@@ -64,13 +64,7 @@ jobs:
         run: flutter pub get
 
       # ─────────────────────────────────────────────
-      # Automatically apply Dart fixes
-      # ─────────────────────────────────────────────
-      - name: Apply Dart Fixes
-        run: dart fix --apply
-
-      # ─────────────────────────────────────────────
-      # Analyze AFTER fixes
+      # Analyze the checked-in source; CI must never rewrite Dart/Android files.
       # ─────────────────────────────────────────────
       - name: Analyze Flutter
         run: flutter analyze
@@ -80,6 +74,22 @@ jobs:
       # ─────────────────────────────────────────────
       - name: Generate App Icons
         run: dart run flutter_launcher_icons
+
+      # ─────────────────────────────────────────────
+      # Remove only the obsolete notification XML resource.
+      # Never delete notification_icon.png: the notification service uses it.
+      # ─────────────────────────────────────────────
+      - name: Clean stale notification resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          find android/app/src/main/res -type f \
+            -name 'notification_icon.xml' -print -delete || true
+          find android/app/src/main/res -type f \
+            -name 'ic_stat_wallet.*' -print -delete || true
+          test -f android/app/src/main/res/drawable/notification_icon.png
+          count=$(find android/app/src/main/res -type f -name 'notification_icon.*' | wc -l)
+          test "$count" -eq 1
 
       # ─────────────────────────────────────────────
       # Clean
@@ -98,6 +108,7 @@ jobs:
       # ─────────────────────────────────────────────
       - name: Final Flutter Analyze
         run: flutter analyze
+
 
       # ─────────────────────────────────────────────
       # Build Release APK

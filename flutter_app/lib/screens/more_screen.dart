@@ -166,12 +166,12 @@ class MoreScreen extends StatelessWidget {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+      builder: (_) => const Padding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
+          children: [
             Text('Help & FAQ',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             SizedBox(height: 14),

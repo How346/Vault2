@@ -18,15 +18,8 @@ class DocWalletApp extends StatelessWidget {
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
       home: const RootGate(),
-      builder: (context, child) => DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: Theme.of(context).brightness == Brightness.light
-              ? AppGradients.background
-              : null,
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Theme.of(context).scaffoldBackgroundColor
-              : null,
-        ),
+      builder: (context, child) => ColoredBox(
+        color: Theme.of(context).scaffoldBackgroundColor,
         child: child ?? const SizedBox.shrink(),
       ),
     );

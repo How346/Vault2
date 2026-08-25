@@ -51,6 +51,11 @@ class TaskController extends ChangeNotifier {
     return draft;
   }
 
+  /// Generates an id up front, so callers that need to import a file (e.g.
+  /// an attached image) can copy it into storage under this exact id before
+  /// the task is persisted.
+  String newId() => 't-${_newId()}';
+
   Future<TaskItem> create({
     required String title,
     String notes = '',
@@ -60,10 +65,11 @@ class TaskController extends ChangeNotifier {
     TaskPriority priority = TaskPriority.medium,
     bool notify = true,
     String profileId = 'me',
-    String imagePath = '',
+    String? id,
+    String? imagePath,
   }) async {
     final task = TaskItem(
-      id: 't-${_newId()}',
+      id: id ?? newId(),
       title: title,
       notes: notes,
       dueAt: dueAt,
@@ -88,6 +94,11 @@ class TaskController extends ChangeNotifier {
     try {
       await NotificationService.instance.cancelTask(task);
     } catch (_) {}
+    if (task.imagePath != null) {
+      try {
+        await StorageService.instance.deleteFilesFor(task.id);
+      } catch (_) {}
+    }
     await _box.delete(task.id);
     notifyListeners();
   }
@@ -96,9 +107,20 @@ class TaskController extends ChangeNotifier {
     try {
       if (task.completed || !task.notify) {
         await NotificationService.instance.cancelTask(task);
-      } else {
-        await NotificationService.instance.scheduleTask(task);
+        return;
       }
-    } catch (_) {}
+
+      final ready = await NotificationService.instance.ensureReminderAccess();
+      if (!ready) {
+        throw StateError(
+          'Precise reminder access is required. Enable Alarms & reminders for Wallet, then return to the app.',
+        );
+      }
+      await NotificationService.instance.scheduleTask(task);
+    } catch (error) {
+      // Keep the task saved. The UI can tell the user why scheduling did not
+      // complete and Android Settings can be opened immediately.
+      rethrow;
+    }
   }
 }

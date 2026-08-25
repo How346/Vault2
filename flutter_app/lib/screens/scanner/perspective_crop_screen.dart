@@ -11,7 +11,7 @@ class PerspectiveCropScreen extends StatefulWidget {
   const PerspectiveCropScreen({
     super.key,
     required this.sourcePath,
-    this.filter = ScanFilter.original,
+    this.filter = ScanFilter.enhance,
     this.forceHorizontal = false,
     this.title = 'Adjust edges',
   });

@@ -80,7 +80,7 @@ class ShareService {
     );
 
     final target = p.join(outDir, 'masked_${p.basenameWithoutExtension(path)}.jpg');
-    await File(target).writeAsBytes(img.encodeJpg(decoded, quality: 90));
+    await File(target).writeAsBytes(img.encodeJpg(decoded, quality: 100));
     return target;
   }
 }
