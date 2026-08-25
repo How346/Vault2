@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'app.dart';
 import 'services/notification_service.dart';
-import 'services/firebase_service.dart';
+import 'services/push_service.dart';
 import 'services/storage_service.dart';
 import 'state/settings_controller.dart';
 import 'state/task_controller.dart';
@@ -54,7 +54,19 @@ Future<void> main() async {
   // cannot crash or prevent the app UI from opening.
   WidgetsBinding.instance.addPostFrameCallback((_) {
     unawaited(_initializeNotifications());
+    unawaited(_initializePush());
   });
+}
+
+Future<void> _initializePush() async {
+  try {
+    await PushService.instance.init();
+  } catch (error, stackTrace) {
+    // Same rule as local notifications: a push/network/plugin problem must
+    // never prevent the wallet UI from starting or working offline.
+    debugPrint('Push initialization failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
 }
 
 Future<void> _initializeNotifications() async {
@@ -62,13 +74,6 @@ Future<void> _initializeNotifications() async {
     await NotificationService.instance.init();
     await NotificationService.instance.requestPermissions();
     await NotificationService.instance.rescheduleStoredNotifications();
-    try {
-      await FirebaseService.instance.init();
-    } catch (error, stackTrace) {
-      // Firebase/FCM must never prevent the offline wallet from working.
-      debugPrint('Firebase/FCM initialization failed: $error');
-      debugPrintStack(stackTrace: stackTrace);
-    }
   } catch (error, stackTrace) {
     // Notification delivery must never prevent the wallet UI from starting.
     debugPrint('Notification initialization failed: $error');

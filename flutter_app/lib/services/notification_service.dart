@@ -189,12 +189,6 @@ class NotificationService {
       await android?.createNotificationChannel(_taskChannel);
       await android?.createNotificationChannel(_lateChannel);
       await android?.createNotificationChannel(_testChannel);
-      await android?.createNotificationChannel(const AndroidNotificationChannel(
-        'wallet_fcm_v1',
-        'Firebase notifications',
-        description: 'Push notifications sent through Firebase Cloud Messaging',
-        importance: Importance.high,
-      ));
 
       _ready = true;
     } finally {
@@ -329,43 +323,6 @@ class NotificationService {
     } catch (_) {
       return null;
     }
-  }
-
-  /// Displays an FCM message while the app is in the foreground.
-  /// When Android receives a normal FCM notification in the background,
-  /// Firebase displays it automatically.
-  Future<void> showRemoteMessage({
-    required String title,
-    required String body,
-    String? payload,
-  }) async {
-    await init();
-    if (!await notificationsEnabled()) return;
-
-    final id = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
-    await _plugin.show(
-      id,
-      title,
-      body,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'wallet_fcm_v1',
-          'Firebase notifications',
-          channelDescription: 'Push notifications sent through Firebase Cloud Messaging',
-          icon: 'notification_icon',
-          importance: Importance.high,
-          priority: Priority.high,
-          playSound: true,
-          enableVibration: true,
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
-      ),
-      payload: payload,
-    );
   }
 
   Future<bool> showTestNotification() async {
