@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'app.dart';
 import 'services/notification_service.dart';
+import 'services/firebase_service.dart';
 import 'services/storage_service.dart';
 import 'state/settings_controller.dart';
 import 'state/task_controller.dart';
@@ -61,6 +62,13 @@ Future<void> _initializeNotifications() async {
     await NotificationService.instance.init();
     await NotificationService.instance.requestPermissions();
     await NotificationService.instance.rescheduleStoredNotifications();
+    try {
+      await FirebaseService.instance.init();
+    } catch (error, stackTrace) {
+      // Firebase/FCM must never prevent the offline wallet from working.
+      debugPrint('Firebase/FCM initialization failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   } catch (error, stackTrace) {
     // Notification delivery must never prevent the wallet UI from starting.
     debugPrint('Notification initialization failed: $error');

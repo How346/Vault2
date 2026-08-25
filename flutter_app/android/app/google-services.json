@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "468354590811",
+    "project_id": "wallet-102f8",
+    "storage_bucket": "wallet-102f8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:468354590811:android:0c4a867332bef825dc377e",
+        "android_client_info": {
+          "package_name": "com.docwallet.doc_wallet"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDrUvmj5bqXwUBtSmGTGBlP7nzb7v-u5uM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

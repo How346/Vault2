@@ -12,6 +12,10 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
+  # Firebase / push notifications
+  firebase_core: ^4.7.0
+  firebase_messaging: ^16.2.2
+
   # Local storage (no cloud)
   hive: ^2.2.3
   hive_flutter: ^1.1.0
