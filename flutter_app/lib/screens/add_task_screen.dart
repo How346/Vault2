@@ -22,22 +22,34 @@ class AddTaskScreen extends StatefulWidget {
 }
 
 class _AddTaskScreenState extends State<AddTaskScreen> {
-  late final TextEditingController _title =
-      TextEditingController(text: widget.task?.title ?? '');
-  late final TextEditingController _notes =
-      TextEditingController(text: widget.task?.notes ?? '');
+  late final TextEditingController _title;
+  late final TextEditingController _notes;
 
   int _tab = 0; // 0 = task, 1 = document reminder
-  late DateTime _date = widget.task?.dueAt ?? DateTime.now();
-  late TimeOfDay _time = TimeOfDay(
-    hour: widget.task?.dueAt.hour ?? 10,
-    minute: widget.task?.dueAt.minute ?? 0,
-  );
-  late TaskRepeat _repeat = widget.task?.repeat ?? TaskRepeat.once;
-  late TaskPriority _priority = widget.task?.priority ?? TaskPriority.medium;
-  late bool _notify = widget.task?.notify ?? true;
-  String? _imagePath = widget.task?.imagePath;
+  late DateTime _date;
+  late TimeOfDay _time;
+  late TaskRepeat _repeat;
+  late TaskPriority _priority;
+  late bool _notify;
+  String? _imagePath;
   bool _pickingImage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final task = widget.task;
+    _title = TextEditingController(text: task?.title ?? '');
+    _notes = TextEditingController(text: task?.notes ?? '');
+    _date = task?.dueAt ?? DateTime.now();
+    _time = TimeOfDay(
+      hour: task?.dueAt.hour ?? 10,
+      minute: task?.dueAt.minute ?? 0,
+    );
+    _repeat = task?.repeat ?? TaskRepeat.once;
+    _priority = task?.priority ?? TaskPriority.medium;
+    _notify = task?.notify ?? true;
+    _imagePath = task?.imagePath;
+  }
 
   @override
   void dispose() {
@@ -140,6 +152,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     );
     final ctrl = context.read<TaskController>();
     final existing = widget.task;
+    final profileId = context.read<WalletController>().activeProfileId;
 
     try {
       // Picked images live in a temp/cache path; copy into permanent,
@@ -162,7 +175,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           repeat: _repeat,
           priority: _priority,
           notify: _notify,
-          profileId: context.read<WalletController>().activeProfileId,
+          profileId: profileId,
           id: taskId,
           imagePath: storedImagePath,
         );
